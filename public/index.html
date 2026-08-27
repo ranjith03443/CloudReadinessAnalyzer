@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ShiftWise — Cloud Readiness Analyzer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              navy: "#1B3A5C",
+              "navy-deep": "#0F2438",
+              "navy-panel": "#16314D",
+              cyan: "#BAE6FD",
+              danger: "#EF4444",
+              amber: "#FCD34D",
+              green: "#4ADE80",
+            },
+            fontFamily: {
+              sans: ["Inter", "system-ui", "sans-serif"],
+              mono: ["JetBrains Mono", "ui-monospace", "monospace"],
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="min-h-screen bg-navy-deep text-slate-100 font-sans">
+    <div class="mx-auto max-w-7xl px-6 py-6">
+      <!-- Header -->
+      <header class="flex items-end justify-between border-b border-white/10 pb-4">
+        <div>
+          <div class="font-mono text-xs uppercase tracking-[0.25em] text-cyan/70">
+            ShiftWise · AI SDLC Migration Copilot
+          </div>
+          <h1 class="mt-1 text-2xl font-semibold">Cloud Readiness Analyzer</h1>
+        </div>
+        <div class="text-right font-mono text-xs uppercase tracking-[0.2em] text-slate-400">
+          <div>Local · .NET / Java → Cloud</div>
+          <div id="modelTag" class="text-cyan/80">model: …</div>
+        </div>
+      </header>
+
+      <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[420px_1fr]">
+        <!-- Input panel -->
+        <section class="rounded-lg border border-white/10 bg-navy-panel/60 p-5">
+          <div class="font-mono text-xs uppercase tracking-[0.2em] text-cyan/70">
+            Input
+          </div>
+
+          <label class="mt-4 block text-sm font-medium text-slate-300">Platform</label>
+          <select
+            id="language"
+            class="mt-1 w-full rounded-md border border-white/15 bg-navy-deep px-3 py-2 text-sm focus:border-cyan focus:outline-none"
+          >
+            <option value=".NET">.NET (C#)</option>
+            <option value="Java">Java</option>
+          </select>
+
+          <div class="mt-4 flex items-center justify-between">
+            <label class="block text-sm font-medium text-slate-300">Legacy code file</label>
+            <button
+              id="loadSampleBtn"
+              class="font-mono text-[11px] uppercase tracking-wider text-cyan/80 hover:text-cyan"
+            >
+              load sample
+            </button>
+          </div>
+          <input
+            id="codeFile"
+            type="file"
+            multiple
+            accept=".cs,.java,.vb,.txt"
+            class="mt-1 block w-full text-sm text-slate-400 file:mr-3 file:rounded-md file:border-0 file:bg-cyan/10 file:px-3 file:py-2 file:text-cyan hover:file:bg-cyan/20"
+          />
+          <!-- Hidden folder picker (webkitdirectory). Triggered by the button below. -->
+          <input
+            id="codeFolder"
+            type="file"
+            multiple
+            webkitdirectory
+            directory
+            class="hidden"
+          />
+          <div class="mt-1 flex items-center gap-2">
+            <button
+              type="button"
+              id="selectFolderBtn"
+              class="font-mono text-[11px] uppercase tracking-wider text-cyan/80 hover:text-cyan"
+            >
+              + select a folder
+            </button>
+            <span id="folderInfo" class="text-[11px] text-slate-500"></span>
+          </div>
+          <p class="mt-1 text-[11px] text-slate-500">
+            Tip: pick individual files (Ctrl/Shift-click) or choose a whole folder — all
+            .cs / .java / .vb files are combined into one readiness score.
+          </p>
+          <textarea
+            id="code"
+            rows="8"
+            placeholder="…or paste your legacy code here"
+            class="mt-2 w-full resize-y rounded-md border border-white/15 bg-navy-deep px-3 py-2 font-mono text-xs leading-relaxed focus:border-cyan focus:outline-none"
+          ></textarea>
+
+          <label class="mt-4 block text-sm font-medium text-slate-300">
+            Config file <span class="text-slate-500">(optional — web.config / app.config / .properties)</span>
+          </label>
+          <input
+            id="configFile"
+            type="file"
+            accept=".config,.xml,.properties,.json,.txt"
+            class="mt-1 block w-full text-sm text-slate-400 file:mr-3 file:rounded-md file:border-0 file:bg-white/5 file:px-3 file:py-2 file:text-slate-300 hover:file:bg-white/10"
+          />
+          <textarea
+            id="config"
+            rows="5"
+            placeholder="…or paste your config here"
+            class="mt-2 w-full resize-y rounded-md border border-white/15 bg-navy-deep px-3 py-2 font-mono text-xs leading-relaxed focus:border-cyan focus:outline-none"
+          ></textarea>
+
+          <button
+            id="analyzeBtn"
+            class="mt-5 w-full rounded-md bg-cyan px-4 py-2.5 font-semibold text-navy-deep transition hover:bg-cyan/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Analyze cloud readiness
+          </button>
+          <p id="inputError" class="mt-2 hidden text-sm text-danger"></p>
+        </section>
+
+        <!-- Results panel -->
+        <section class="min-h-[60vh]">
+          <!-- Empty state -->
+          <div
+            id="emptyState"
+            class="flex h-full min-h-[60vh] flex-col items-center justify-center rounded-lg border border-dashed border-white/10 text-center"
+          >
+            <div class="font-mono text-sm uppercase tracking-[0.2em] text-slate-500">
+              Awaiting analysis
+            </div>
+            <p class="mt-2 max-w-sm text-sm text-slate-500">
+              Upload or paste a legacy .NET / Java file and an optional config,
+              then run the analyzer to see deprecated APIs, a modernized version,
+              cloud-ready configuration, and a readiness score.
+            </p>
+          </div>
+
+          <!-- Loading -->
+          <div
+            id="loadingState"
+            class="hidden h-full min-h-[60vh] flex-col items-center justify-center rounded-lg border border-white/10 bg-navy-panel/40 px-6 text-center"
+          >
+            <div class="font-mono text-sm uppercase tracking-[0.2em] text-cyan/80">
+              Running migration pipeline
+            </div>
+            <div id="liveTokens" class="mt-3 hidden font-mono text-[11px] text-slate-400">
+              <span class="text-slate-500">tokens used:</span>
+              <span id="liveTokenCount" class="text-cyan">0</span>
+            </div>
+            <div id="pipeline" class="mt-5 w-full max-w-md space-y-3 text-left"></div>
+          </div>
+
+          <!-- Results -->
+          <div id="results" class="hidden space-y-6"></div>
+        </section>
+      </div>
+
+      <footer class="mt-10 border-t border-white/10 pt-4 text-center font-mono text-[11px] uppercase tracking-[0.2em] text-slate-600">
+        Runs locally · your code and key never leave your machine except the OpenAI API call
+      </footer>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
