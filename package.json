@@ -1,7 +1,7 @@
 {
-  "name": "cloud-readiness-analyzer",
+  "name": "shiftwise-transformation-platform",
   "version": "1.0.0",
-  "description": "AI-powered .NET/Java cloud readiness analyzer. Upload a legacy code file and optional config, get deprecated-API detection, modernized code, cloud-ready configuration, a risk summary, and a cloud readiness score.",
+  "description": "ShiftWise Transformation Platform — a two-phase, multi-agent migration assessment and transformation pipeline (ingest, assess, Gate A, transform, Gate B) for legacy .NET, Java, COBOL, VB6/VB.NET, PHP and Python codebases, targeting Azure, AWS or GCP.",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -12,6 +12,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
     "@langchain/core": "^1.1.49",
     "@langchain/langgraph": "^1.4.2",
     "dotenv": "^16.4.7",

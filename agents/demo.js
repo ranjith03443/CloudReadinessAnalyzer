@@ -19,6 +19,7 @@ const DOTNET_DEMO_RESULT = {
   },
   findings: [
     {
+      id: "dn1",
       title: "ConfigurationManager.AppSettings used for runtime config",
       severity: "High",
       category: "Hardcoded Config",
@@ -32,6 +33,7 @@ const DOTNET_DEMO_RESULT = {
         "environment variables (e.g. Azure App Configuration or AWS Parameter Store).",
     },
     {
+      id: "dn2",
       title: "Hardcoded SQL Server connection string with credentials",
       severity: "High",
       category: "Hardcoded Config",
@@ -44,6 +46,7 @@ const DOTNET_DEMO_RESULT = {
         "managed identity / IAM auth over username + password where available.",
     },
     {
+      id: "dn3",
       title: "System.Web / HttpContext.Current dependency",
       severity: "High",
       category: "Cloud Incompatibility",
@@ -56,6 +59,7 @@ const DOTNET_DEMO_RESULT = {
         "explicitly so the service has no ambient static state.",
     },
     {
+      id: "dn4",
       title: "Synchronous blocking database calls",
       severity: "Medium",
       category: "Cloud Incompatibility",
@@ -67,6 +71,7 @@ const DOTNET_DEMO_RESULT = {
         "Switch to async ADO.NET (ExecuteReaderAsync) or an async-first ORM and await calls end-to-end.",
     },
     {
+      id: "dn5",
       title: "Local file-system logging to a fixed path",
       severity: "Medium",
       category: "Cloud Incompatibility",
@@ -79,6 +84,7 @@ const DOTNET_DEMO_RESULT = {
         "console logger), or ship to a centralized log service.",
     },
     {
+      id: "dn6",
       title: "BinaryFormatter used for caching",
       severity: "Low",
       category: "Deprecated API",
@@ -200,6 +206,7 @@ const JAVA_DEMO_RESULT = {
   },
   findings: [
     {
+      id: "jv1",
       title: "Hardcoded JDBC URL with embedded credentials",
       severity: "High",
       category: "Hardcoded Config",
@@ -214,6 +221,7 @@ const JAVA_DEMO_RESULT = {
         "auth over a static username + password where available.",
     },
     {
+      id: "jv2",
       title: "SQL built via string concatenation (injection risk)",
       severity: "High",
       category: "Cloud Incompatibility",
@@ -227,6 +235,7 @@ const JAVA_DEMO_RESULT = {
         "connection pool (HikariCP / Spring Data) so connections scale cleanly per instance.",
     },
     {
+      id: "jv3",
       title: "File-system logging to a fixed local path",
       severity: "High",
       category: "Cloud Incompatibility",
@@ -240,6 +249,7 @@ const JAVA_DEMO_RESULT = {
         "the platform collect them, or ship to a centralized log service.",
     },
     {
+      id: "jv4",
       title: "Explicit JDBC driver loading with Class.forName",
       severity: "Medium",
       category: "Deprecated API",
@@ -252,6 +262,7 @@ const JAVA_DEMO_RESULT = {
         "managed DataSource / connection pool.",
     },
     {
+      id: "jv5",
       title: "Manual JDBC resource handling without try-with-resources",
       severity: "Medium",
       category: "Cloud Incompatibility",
@@ -264,6 +275,7 @@ const JAVA_DEMO_RESULT = {
         "(Spring JdbcTemplate / JPA) that manages connection lifecycle for you.",
     },
     {
+      id: "jv6",
       title: "Legacy synchronized collections (Vector / Hashtable)",
       severity: "Low",
       category: "Deprecated API",
@@ -373,6 +385,359 @@ payment:
     ],
   },
 };
+
+// --- Phase 1 (assessment-only) demo fixtures ---------------------------------
+//
+// Reuses the findings/score/risk data above (still accurate for the bundled
+// sample files) and layers on canned dependency + strategy + estimate data,
+// so demo mode exercises the full 5-agent assessment graph and Gate A without
+// needing an API key.
+
+const DOTNET_ASSESSMENT_DEMO = {
+  summary: DOTNET_DEMO_RESULT.summary,
+  findings: DOTNET_DEMO_RESULT.findings,
+  dependencySummary:
+    "3 external dependencies found (System, System.Web, System.Data.SqlClient) — all standard " +
+    ".NET Framework/BCL libraries with modern cross-platform equivalents. No internal cross-file " +
+    "references were unresolved.",
+  dependencies: [
+    { reference: "System.Web", category: "external", risk: "High", note: "System.Web does not exist in modern ASP.NET Core — this is the primary migration blocker, not just a library swap." },
+    { reference: "System.Data.SqlClient", category: "external", risk: "Low", note: "Superseded by Microsoft.Data.SqlClient; a straightforward package swap." },
+    { reference: "System", category: "external", risk: "None", note: "Core BCL namespace, no migration impact." },
+  ],
+  externalDependencyCount: 3,
+  internalDependencyCount: 0,
+  recommendedStrategy: "Replatform",
+  migrationType: "same-language",
+  targetLanguage: null,
+  targetArchitecture: "Azure App Service (Linux) + Azure SQL Database + Azure Key Vault",
+  strategyJustification:
+    "The blockers found (System.Web coupling, hardcoded secrets, local-disk logging) are all " +
+    "mechanical — none require redesigning the domain logic. Modernizing to ASP.NET Core in place " +
+    "and moving to a managed App Service is materially lower-risk than a full rewrite, and the " +
+    "existing SQL Server schema maps directly onto Azure SQL.",
+  cloudReadinessScore: DOTNET_DEMO_RESULT.cloudReadinessScore,
+  scoreRationale: DOTNET_DEMO_RESULT.scoreRationale,
+  scoreBreakdown: DOTNET_DEMO_RESULT.scoreBreakdown,
+  riskSummary: DOTNET_DEMO_RESULT.riskSummary,
+  migrationEstimate: DOTNET_DEMO_RESULT.migrationEstimate,
+};
+
+const JAVA_ASSESSMENT_DEMO = {
+  summary: JAVA_DEMO_RESULT.summary,
+  findings: JAVA_DEMO_RESULT.findings,
+  dependencySummary:
+    "2 external dependencies found (java.sql, java.util) — both standard JDK libraries. No " +
+    "internal cross-file references were unresolved.",
+  dependencies: [
+    { reference: "java.sql", category: "external", risk: "Low", note: "Standard JDBC API; migrates cleanly to a managed connection pool (HikariCP/Spring Data)." },
+    { reference: "java.util", category: "external", risk: "None", note: "Core JDK collections, no migration impact beyond replacing legacy Vector/Hashtable usage." },
+  ],
+  externalDependencyCount: 2,
+  internalDependencyCount: 0,
+  recommendedStrategy: "Replatform",
+  migrationType: "same-language",
+  targetLanguage: null,
+  targetArchitecture: "AWS ECS Fargate + Amazon RDS (PostgreSQL) + AWS Secrets Manager",
+  strategyJustification:
+    "The blockers (hardcoded JDBC credentials, string-concatenated SQL, local-disk logging) are " +
+    "mechanical fixes, not architectural ones — the domain logic is small and framework-light, so " +
+    "porting to Spring Boot in the same language is lower-risk than a cross-tech rewrite and keeps " +
+    "the team's existing Java expertise fully applicable.",
+  cloudReadinessScore: JAVA_DEMO_RESULT.cloudReadinessScore,
+  scoreRationale: JAVA_DEMO_RESULT.scoreRationale,
+  scoreBreakdown: JAVA_DEMO_RESULT.scoreBreakdown,
+  riskSummary: JAVA_DEMO_RESULT.riskSummary,
+  migrationEstimate: JAVA_DEMO_RESULT.migrationEstimate,
+};
+
+function pickAssessmentDemoResult(ctx = {}) {
+  const lang = String(ctx.language || "").toLowerCase();
+  const name = String(ctx.fileName || "").toLowerCase();
+  if (lang.includes("java") || name.endsWith(".java")) return JAVA_ASSESSMENT_DEMO;
+  return DOTNET_ASSESSMENT_DEMO;
+}
+
+const ASSESSMENT_DEMO_USAGE = {
+  detect: { promptTokens: 1842, completionTokens: 731, totalTokens: 2573 },
+  dependency: { promptTokens: 980, completionTokens: 340, totalTokens: 1320 },
+  strategize: { promptTokens: 2210, completionTokens: 512, totalTokens: 2722 },
+  score: { promptTokens: 1903, completionTokens: 402, totalTokens: 2305 },
+  estimate: { promptTokens: 1650, completionTokens: 380, totalTokens: 2030 },
+};
+
+// Mirrors runAssessmentPipeline(ctx, onEvent): emits the same 5 stage events,
+// in the same fan-out/fan-in order as the real graph (detect+dependency
+// parallel, then score+strategize, then estimate), then resolves with the
+// canned result matching the requested platform. Templates the target
+// architecture string on the caller's selected cloud/pattern so switching
+// them in a live demo visibly changes the output.
+export async function runDemoAssessment(ctx = {}, onEvent = () => {}) {
+  const base = pickAssessmentDemoResult(ctx);
+  const result = {
+    ...base,
+    ...applyMigrationPreference(base, ctx),
+    targetArchitecture: templateTargetArchitecture(base.targetArchitecture, ctx),
+  };
+  const start = Date.now();
+  const telemetry = { stages: [], promptTokens: 0, completionTokens: 0, totalTokens: 0, totalMs: 0 };
+  const record = (stage, usage, ms) => {
+    telemetry.stages.push({ stage, ...usage, ms });
+    telemetry.promptTokens += usage.promptTokens;
+    telemetry.completionTokens += usage.completionTokens;
+    telemetry.totalTokens += usage.totalTokens;
+  };
+
+  onEvent({ type: "stage", stage: "detect", status: "start" });
+  onEvent({ type: "stage", stage: "dependency", status: "start" });
+
+  await sleep(1100);
+  record("detect", ASSESSMENT_DEMO_USAGE.detect, 1100);
+  onEvent({ type: "stage", stage: "detect", status: "done", count: result.findings.length, usage: ASSESSMENT_DEMO_USAGE.detect, ms: 1100 });
+
+  await sleep(500);
+  record("dependency", ASSESSMENT_DEMO_USAGE.dependency, 1600);
+  onEvent({ type: "stage", stage: "dependency", status: "done", count: result.dependencies.length, usage: ASSESSMENT_DEMO_USAGE.dependency, ms: 1600 });
+
+  onEvent({ type: "stage", stage: "score", status: "start" });
+  onEvent({ type: "stage", stage: "strategize", status: "start" });
+
+  await sleep(700);
+  record("score", ASSESSMENT_DEMO_USAGE.score, 700);
+  onEvent({ type: "stage", stage: "score", status: "done", usage: ASSESSMENT_DEMO_USAGE.score, ms: 700 });
+
+  await sleep(500);
+  record("strategize", ASSESSMENT_DEMO_USAGE.strategize, 1200);
+  onEvent({ type: "stage", stage: "strategize", status: "done", usage: ASSESSMENT_DEMO_USAGE.strategize, ms: 1200 });
+
+  onEvent({ type: "stage", stage: "estimate", status: "start" });
+  await sleep(600);
+  record("estimate", ASSESSMENT_DEMO_USAGE.estimate, 600);
+  onEvent({ type: "stage", stage: "estimate", status: "done", usage: ASSESSMENT_DEMO_USAGE.estimate, ms: 600 });
+
+  telemetry.totalMs = Date.now() - start;
+  telemetry.provider = "demo";
+  telemetry.model = "gpt-4o-mini (demo)";
+  telemetry.estimatedCostUsd = demoCost(telemetry);
+
+  return { ...result, telemetry };
+}
+
+// Honors a stated Migration Goal preference (Cloud Readiness / Cross-Tech /
+// let AI decide) in demo mode, the same way the real Strategy Planner is
+// instructed to: generally follow it, and say so in the justification,
+// rather than ignoring it. Returns the fields to override, or {} if no
+// preference was stated.
+function applyMigrationPreference(base, ctx) {
+  const { preferredMigrationType, preferredTargetLanguage, language } = ctx;
+  if (!preferredMigrationType) return {};
+
+  if (preferredMigrationType === "cross-tech") {
+    const targetLanguage = preferredTargetLanguage && preferredTargetLanguage !== language ? preferredTargetLanguage : "Java";
+    return {
+      recommendedStrategy: "Refactor",
+      migrationType: "cross-tech",
+      targetLanguage,
+      strategyJustification:
+        `Following your stated goal of a cross-tech migration to ${targetLanguage}. Nothing in the findings makes this ` +
+        `inadvisable, but note it carries materially more risk and effort than the same-language modernization this codebase ` +
+        `would otherwise need — see the Estimation and Validation tabs for the confidence trade-off.`,
+    };
+  }
+
+  // "same-language" preference: the canned demo results are already
+  // same-language by default, just make the justification acknowledge it
+  // was a stated goal, not an unprompted default.
+  return {
+    strategyJustification:
+      `Following your stated goal of same-language cloud readiness modernization. ` + base.strategyJustification,
+  };
+}
+
+// Swaps the canned recommendation's cloud/pattern wording for whatever the
+// caller actually selected, so the demo visibly reacts to the Target
+// Cloud / Target Architecture Pattern inputs instead of always saying Azure.
+function templateTargetArchitecture(text, ctx) {
+  const cloud = ctx.targetCloud;
+  if (!cloud || text.startsWith(cloud) || text.toLowerCase().includes(cloud.toLowerCase())) return text;
+  const byCloud = {
+    Azure: "Azure App Service (Linux) + Azure SQL Database + Azure Key Vault",
+    AWS: "AWS ECS Fargate + Amazon RDS + AWS Secrets Manager",
+    GCP: "GCP Cloud Run + Cloud SQL + Secret Manager",
+  };
+  return byCloud[cloud] || text;
+}
+
+// Demo-mode reply for Gate A's "Discuss with AI" chat — no API key needed.
+// Loosely reacts to a few common keywords so the chat still feels responsive
+// in a live demo, without making any real model call.
+export async function discussStrategyDemo({ userMessage, initialRecommendation } = {}) {
+  await sleep(500);
+  const msg = String(userMessage || "").toLowerCase();
+  const rec = initialRecommendation || {};
+
+  if (msg.includes("aws")) {
+    return {
+      reply:
+        "Understood — targeting AWS instead. The findings here don't require a language change, so " +
+        "the recommendation still holds as a same-language modernization; the target architecture " +
+        "would move to AWS ECS Fargate + RDS + Secrets Manager.",
+      suggestedMigrationType: "same-language",
+      suggestedTargetLanguage: null,
+      suggestedTargetArchitecturePattern: "Containers",
+    };
+  }
+  if (msg.includes("gcp") || msg.includes("google")) {
+    return {
+      reply:
+        "Got it — for GCP this still fits a same-language modernization; I'd target Cloud Run + " +
+        "Cloud SQL + Secret Manager rather than a full rewrite.",
+      suggestedMigrationType: "same-language",
+      suggestedTargetLanguage: null,
+      suggestedTargetArchitecturePattern: "Serverless",
+    };
+  }
+  if (msg.includes("rewrite") || msg.includes("java") || msg.includes("different language") || msg.includes("cross-tech")) {
+    return {
+      reply:
+        "A rewrite is possible, but I'd push back on it here: none of the findings require a " +
+        "different language, they're all mechanical (config externalization, async I/O, structured " +
+        "logging). A cross-tech rewrite would cost materially more effort for the same outcome — " +
+        "I'd only recommend it if the team specifically wants to standardize on a different stack.",
+      suggestedMigrationType: rec.migrationType || "same-language",
+      suggestedTargetLanguage: null,
+      suggestedTargetArchitecturePattern: null,
+    };
+  }
+  return {
+    reply:
+      "Noted. Based on the findings and dependencies already gathered, I don't see anything that " +
+      "changes the underlying recommendation — let me know a specific constraint (target cloud, " +
+      "team skillset, timeline) and I'll factor it in.",
+    suggestedMigrationType: rec.migrationType || "same-language",
+    suggestedTargetLanguage: rec.targetLanguage || null,
+    suggestedTargetArchitecturePattern: null,
+  };
+}
+
+// --- Phase 2 (transformation) demo fixtures ----------------------------------
+//
+// Reuses the modernized code/config already written for the old single-pass
+// demo (still accurate) for the two same-language cases, and adds one canned
+// cross-tech (.NET -> Java) example so switching migration type in a live
+// demo produces visibly different Transformation/Validation output.
+
+function resolvedAll(findings, note) {
+  return findings.map((f) => ({ findingId: f.id, resolved: true, note }));
+}
+
+const DOTNET_SAME_LANG_TRANSFORM_DEMO = {
+  modernizedCode: DOTNET_DEMO_RESULT.modernizedCode,
+  cloudReadyConfig: DOTNET_DEMO_RESULT.cloudReadyConfig,
+  translationAssumptions: [],
+  findingResolutions: resolvedAll(DOTNET_DEMO_RESULT.findings, "Addressed by the ASP.NET Core rewrite (DI, async I/O, externalized config)."),
+  staticChecks: [
+    { check: "Braces/blocks balanced", passed: true },
+    { check: "No leftover hardcoded secrets", passed: true },
+    { check: "No leftover TODO/FIXME markers", passed: true },
+  ],
+  structuralParity: null,
+  manualReviewRecommended: false,
+  validationSummary:
+    "High confidence: all 6 findings are addressed by mechanical, well-understood refactors " +
+    "(dependency injection, async I/O, structured logging, externalized config). No domain logic changed.",
+};
+
+const JAVA_SAME_LANG_TRANSFORM_DEMO = {
+  modernizedCode: JAVA_DEMO_RESULT.modernizedCode,
+  cloudReadyConfig: JAVA_DEMO_RESULT.cloudReadyConfig,
+  translationAssumptions: [],
+  findingResolutions: resolvedAll(JAVA_DEMO_RESULT.findings, "Addressed by the Spring Boot rewrite (connection pool, parameterized SQL, stdout logging)."),
+  staticChecks: [
+    { check: "Braces/blocks balanced", passed: true },
+    { check: "No leftover hardcoded secrets", passed: true },
+    { check: "No leftover TODO/FIXME markers", passed: true },
+  ],
+  structuralParity: null,
+  manualReviewRecommended: false,
+  validationSummary:
+    "High confidence: all 6 findings are addressed by mechanical, well-understood refactors " +
+    "(connection pooling, parameterized queries, stdout logging, externalized config). No domain logic changed.",
+};
+
+// A single canned cross-tech example, regardless of source language, so the
+// UI has something concrete to show when Migration Type = Cross-Tech.
+function crossTechTransformDemo(sourceFindings) {
+  return {
+    modernizedCode: JAVA_DEMO_RESULT.modernizedCode,
+    cloudReadyConfig: JAVA_DEMO_RESULT.cloudReadyConfig,
+    translationAssumptions: [
+      "Assumed the original's synchronous request/response flow maps directly onto a Spring Boot @Service method — no async boundary was inferred.",
+      "Assumed numeric precision (decimal/currency handling) is equivalent between the source type system and the target's BigDecimal usage; not independently verified.",
+      "Assumed the original caching behavior (now removed) was not relied on for correctness elsewhere in the caller — flagged for manual confirmation.",
+    ],
+    findingResolutions: resolvedAll(sourceFindings, "Logic re-implemented in the target language; behavioral equivalence not independently verified — see translation assumptions."),
+    staticChecks: [
+      { check: "Braces/blocks balanced", passed: true },
+      { check: "No leftover hardcoded secrets", passed: true },
+      { check: "No leftover TODO/FIXME markers", passed: true },
+      { check: "Method/function count within expected range of the original", passed: true },
+    ],
+    structuralParity: { originalDeclarationCount: sourceFindings.length ? 4 : 0, modernizedDeclarationCount: 3, withinExpectedRange: true },
+    manualReviewRecommended: true,
+    validationSummary:
+      "Lower confidence than a same-language modernization: this is a full logic translation, so behavioral " +
+      "equivalence cannot be verified deterministically. Manual review is strongly recommended before this " +
+      "artifact is treated as production-ready — see the translation assumptions list.",
+  };
+}
+
+function pickTransformDemoResult(ctx = {}) {
+  if (ctx.migrationType === "cross-tech") {
+    return crossTechTransformDemo(ctx.findings || []);
+  }
+  const lang = String(ctx.language || "").toLowerCase();
+  if (lang.includes("java")) return JAVA_SAME_LANG_TRANSFORM_DEMO;
+  return DOTNET_SAME_LANG_TRANSFORM_DEMO;
+}
+
+const TRANSFORM_DEMO_USAGE = {
+  modernize: { promptTokens: 2156, completionTokens: 968, totalTokens: 3124 },
+  validate: { promptTokens: 1780, completionTokens: 420, totalTokens: 2200 },
+};
+
+// Mirrors runTransformPipeline(ctx, onEvent): emits the same 2 stage events
+// (modernize -> validate, strictly sequential since validate needs
+// modernize's output), then resolves with a canned result — cross-tech vs.
+// same-language, per ctx.migrationType.
+export async function runDemoTransformation(ctx = {}, onEvent = () => {}) {
+  const result = pickTransformDemoResult(ctx);
+  const start = Date.now();
+  const telemetry = { stages: [], promptTokens: 0, completionTokens: 0, totalTokens: 0, totalMs: 0 };
+  const record = (stage, usage, ms) => {
+    telemetry.stages.push({ stage, ...usage, ms });
+    telemetry.promptTokens += usage.promptTokens;
+    telemetry.completionTokens += usage.completionTokens;
+    telemetry.totalTokens += usage.totalTokens;
+  };
+
+  onEvent({ type: "stage", stage: "modernize", status: "start" });
+  await sleep(1000);
+  record("modernize", TRANSFORM_DEMO_USAGE.modernize, 1000);
+  onEvent({ type: "stage", stage: "modernize", status: "done", usage: TRANSFORM_DEMO_USAGE.modernize, ms: 1000 });
+
+  onEvent({ type: "stage", stage: "validate", status: "start" });
+  await sleep(800);
+  record("validate", TRANSFORM_DEMO_USAGE.validate, 800);
+  onEvent({ type: "stage", stage: "validate", status: "done", usage: TRANSFORM_DEMO_USAGE.validate, ms: 800 });
+
+  telemetry.totalMs = Date.now() - start;
+  telemetry.provider = "demo";
+  telemetry.model = "gpt-4o-mini (demo)";
+  telemetry.estimatedCostUsd = demoCost(telemetry);
+
+  return { ...result, telemetry };
+}
 
 // Picks the canned result that matches the requested platform. Defaults to the
 // .NET result. Matching is based on the language flag, then the file extension.

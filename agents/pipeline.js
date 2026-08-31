@@ -68,7 +68,7 @@ async function scoreNode(state, runConfig) {
   const { openai, model, onEvent, telemetry } = runConfig.configurable;
   onEvent({ type: "stage", stage: "score", status: "start" });
   const t0 = Date.now();
-  const { cloudReadinessScore, scoreRationale, scoreBreakdown, riskSummary, migrationEstimate, usage } =
+  const { cloudReadinessScore, scoreRationale, scoreBreakdown, riskSummary, usage } =
     await score({
       openai,
       model,
@@ -77,7 +77,7 @@ async function scoreNode(state, runConfig) {
   const ms = Date.now() - t0;
   recordStage(telemetry, "score", usage, ms);
   onEvent({ type: "stage", stage: "score", status: "done", usage, ms });
-  return { cloudReadinessScore, scoreRationale, scoreBreakdown, riskSummary, migrationEstimate };
+  return { cloudReadinessScore, scoreRationale, scoreBreakdown, riskSummary };
 }
 
 const graph = new StateGraph(PipelineState)

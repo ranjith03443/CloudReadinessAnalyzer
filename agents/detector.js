@@ -1,8 +1,8 @@
 import { runJsonAgent, buildSourceBlock, agentError } from "./shared.js";
 
-const SYSTEM = `You are the DETECTION agent in a multi-agent cloud-migration analysis pipeline. You ONLY detect and explain issues — other agents handle code rewriting and scoring. Do NOT rewrite code and do NOT produce a score.
+const SYSTEM = `You are the CODE INTELLIGENCE agent in a multi-agent cloud-migration analysis pipeline. You ONLY detect and explain issues — other agents handle dependency analysis, strategy, code rewriting and scoring. Do NOT rewrite code and do NOT produce a score.
 
-You will receive a legacy .NET (C#) or Java source file and an optional configuration file. Identify migration blockers and tag each as exactly one of these categories: "Deprecated API", "Hardcoded Config", "Cloud Incompatibility".
+You will receive a legacy source file (in the language/platform stated below — e.g. .NET, Java, COBOL, VB6/VB.NET, PHP, or Python) and an optional configuration file. Identify migration blockers and tag each as exactly one of these categories: "Deprecated API", "Hardcoded Config", "Cloud Incompatibility".
 
 Return ONLY a JSON object with this exact shape:
 {
@@ -27,9 +27,42 @@ Rules:
 - Detect: deprecated/unsupported APIs; hardcoded configuration (connection strings, secrets, file paths, machine names, absolute URLs); and cloud incompatibilities (local file system, in-process session, machine-bound state, missing config externalization, etc.).
 - Return valid JSON only, no markdown.`;
 
-export async function detect({ openai, model, code, config, language, fileName }) {
+// Passed to Claude as the forced tool call's input_schema (see shared.js) —
+// OpenAI/Azure rely on response_format: json_object plus the prose above.
+const RESULT_SCHEMA = {
+  type: "object",
+  properties: {
+    summary: {
+      type: "object",
+      properties: {
+        fileName: { type: "string" },
+        language: { type: "string" },
+        overview: { type: "string" },
+      },
+    },
+    findings: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          category: { type: "string", enum: ["Deprecated API", "Hardcoded Config", "Cloud Incompatibility"] },
+          severity: { type: "string", enum: ["High", "Medium", "Low"] },
+          title: { type: "string" },
+          location: { type: "string" },
+          explanation: { type: "string" },
+          recommendation: { type: "string" },
+        },
+        required: ["id", "category", "severity", "title", "explanation", "recommendation"],
+      },
+    },
+  },
+  required: ["findings"],
+};
+
+export async function detect({ openai, provider, model, code, config, language, fileName }) {
   const user = buildSourceBlock({ code, config, language, fileName });
-  const { data: result, usage } = await runJsonAgent({ openai, model, name: "Detection", system: SYSTEM, user });
+  const { data: result, usage } = await runJsonAgent({ openai, provider, model, name: "Detection", system: SYSTEM, user, schema: RESULT_SCHEMA });
   if (!Array.isArray(result.findings)) {
     throw agentError("Detection", "missing or invalid 'findings' array");
   }

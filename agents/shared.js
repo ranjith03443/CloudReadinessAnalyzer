@@ -22,10 +22,25 @@ export function buildSourceBlock({ code, config, language, fileName }) {
   ].join("\n");
 }
 
-// Runs one agent: a single JSON-only chat completion. Throws a labelled error
-// if the model returns something that is not valid JSON. Returns the parsed
-// JSON plus the token-usage object reported by the model (when available).
-export async function runJsonAgent({ openai, model, name, system, user }) {
+// Runs one agent: a single JSON-only completion. Same call site and return
+// shape ({ data, usage }) for every agent and every provider — only the
+// internals branch on `provider`, since OpenAI/Azure and Claude reach
+// structured JSON output through different mechanisms:
+//  - openai/azure: `response_format: { type: "json_object" }`, guided by the
+//    shape described in `system`'s prose.
+//  - claude: a forced tool call (Claude has no json_object mode). Prose
+//    alone under-constrains the tool call for anything beyond a flat object
+//    (an array that must mirror a supplied input list, in particular), so
+//    every call site also passes `schema` — a JSON Schema for the expected
+//    result — used as the tool's input_schema. Without it Claude only has
+//    the system prompt's prose to go on and can drop or malform fields.
+// The `openai` param name is kept (rather than a generic `client`) to avoid
+// touching every agent's call site; it holds whichever provider's client.
+export async function runJsonAgent({ openai, provider = "openai", model, name, system, user, schema }) {
+  if (provider === "claude") {
+    return runJsonAgentClaude({ client: openai, model, name, system, user, schema });
+  }
+
   const completion = await openai.chat.completions.create({
     model,
     temperature: 0.2,
@@ -44,6 +59,38 @@ export async function runJsonAgent({ openai, model, name, system, user }) {
     throw new Error(`The ${name} agent returned a response that was not valid JSON. Please try again.`);
   }
   return { data, usage: normalizeUsage(completion.usage) };
+}
+
+async function runJsonAgentClaude({ client, model, name, system, user, schema }) {
+  const completion = await client.messages.create({
+    model,
+    max_tokens: 4096,
+    system,
+    messages: [{ role: "user", content: user }],
+    tools: [
+      {
+        name: "submit_result",
+        description: `Submit the ${name} agent's result as JSON matching the shape described in the system prompt.`,
+        input_schema: schema || { type: "object" },
+      },
+    ],
+    tool_choice: { type: "tool", name: "submit_result" },
+  });
+
+  const toolUse = (completion.content || []).find((block) => block.type === "tool_use");
+  if (!toolUse || typeof toolUse.input !== "object" || toolUse.input === null) {
+    throw new Error(`The ${name} agent (Claude) did not return a usable result. Please try again.`);
+  }
+
+  const usage = completion.usage
+    ? {
+        promptTokens: completion.usage.input_tokens ?? 0,
+        completionTokens: completion.usage.output_tokens ?? 0,
+        totalTokens: (completion.usage.input_tokens ?? 0) + (completion.usage.output_tokens ?? 0),
+      }
+    : null;
+
+  return { data: toolUse.input, usage };
 }
 
 // Normalizes a chat-completion usage object into a stable shape. Returns null
@@ -78,26 +125,4 @@ export function recordStage(telemetry, stage, usage, ms) {
   telemetry.promptTokens += u.promptTokens;
   telemetry.completionTokens += u.completionTokens;
   telemetry.totalTokens += u.totalTokens;
-}
-
-// Per-1M-token USD pricing for cost estimates. Falls back to gpt-4o-mini rates
-// for unknown models/deployments. These are estimates only.
-const PRICING = {
-  "gpt-4o-mini": { in: 0.15, out: 0.6 },
-  "gpt-4o": { in: 2.5, out: 10 },
-  "gpt-4.1-mini": { in: 0.4, out: 1.6 },
-  "gpt-4.1": { in: 2, out: 8 },
-  "o4-mini": { in: 1.1, out: 4.4 },
-};
-
-export function estimateCostUsd(model, telemetry) {
-  if (!telemetry) return 0;
-  const key = String(model || "").toLowerCase();
-  const rate =
-    Object.keys(PRICING).find((k) => key.includes(k)) || "gpt-4o-mini";
-  const { in: inRate, out: outRate } = PRICING[rate];
-  return (
-    (telemetry.promptTokens / 1e6) * inRate +
-    (telemetry.completionTokens / 1e6) * outRate
-  );
 }
