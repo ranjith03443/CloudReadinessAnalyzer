@@ -36,22 +36,32 @@ export function buildSourceBlock({ code, config, language, fileName }) {
 //    the system prompt's prose to go on and can drop or malform fields.
 // The `openai` param name is kept (rather than a generic `client`) to avoid
 // touching every agent's call site; it holds whichever provider's client.
-export async function runJsonAgent({ openai, provider = "openai", model, name, system, user, schema }) {
+// `maxTokens` caps the completion's output. Agents that emit a whole rewritten
+// file (Transformation) pass a large value; the rest rely on the default.
+export async function runJsonAgent({ openai, provider = "openai", model, name, system, user, schema, maxTokens }) {
   if (provider === "claude") {
-    return runJsonAgentClaude({ client: openai, model, name, system, user, schema });
+    return runJsonAgentClaude({ client: openai, model, name, system, user, schema, maxTokens });
   }
 
   const completion = await openai.chat.completions.create({
     model,
     temperature: 0.2,
     response_format: { type: "json_object" },
+    ...(maxTokens ? { max_tokens: maxTokens } : {}),
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },
     ],
   });
 
-  const raw = completion.choices?.[0]?.message?.content || "{}";
+  const choice = completion.choices?.[0];
+  if (choice?.finish_reason === "length") {
+    throw new Error(
+      `The ${name} agent's response was cut off before it finished (hit the output token limit). ` +
+        `Try a smaller input file, or switch to a model with more output room.`
+    );
+  }
+  const raw = choice?.message?.content || "{}";
   let data;
   try {
     data = JSON.parse(raw);
@@ -61,10 +71,11 @@ export async function runJsonAgent({ openai, provider = "openai", model, name, s
   return { data, usage: normalizeUsage(completion.usage) };
 }
 
-async function runJsonAgentClaude({ client, model, name, system, user, schema }) {
+async function runJsonAgentClaude({ client, model, name, system, user, schema, maxTokens }) {
+  const cap = maxTokens || 8192;
   const completion = await client.messages.create({
     model,
-    max_tokens: 4096,
+    max_tokens: cap,
     system,
     messages: [{ role: "user", content: user }],
     tools: [
@@ -76,6 +87,13 @@ async function runJsonAgentClaude({ client, model, name, system, user, schema })
     ],
     tool_choice: { type: "tool", name: "submit_result" },
   });
+
+  if (completion.stop_reason === "max_tokens") {
+    throw new Error(
+      `The ${name} agent's response was cut off before it finished (hit the ${cap}-token output limit). ` +
+        `Try a smaller input file, or raise maxTokens for this agent.`
+    );
+  }
 
   const toolUse = (completion.content || []).find((block) => block.type === "tool_use");
   if (!toolUse || typeof toolUse.input !== "object" || toolUse.input === null) {

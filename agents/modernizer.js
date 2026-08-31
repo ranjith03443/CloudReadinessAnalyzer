@@ -80,7 +80,18 @@ export async function modernize({
     "\n\n--- ISSUES DETECTED BY THE CODE INTELLIGENCE AGENT ---\n" +
     JSON.stringify(findings || [], null, 2);
 
-  const { data: result, usage } = await runJsonAgent({ openai, provider, model, name: "Transformation", system, user, schema: RESULT_SCHEMA });
+  // This agent emits the full rewritten file plus its config as JSON string
+  // values, so it needs far more output room than the default.
+  const { data: result, usage } = await runJsonAgent({
+    openai,
+    provider,
+    model,
+    name: "Transformation",
+    system,
+    user,
+    schema: RESULT_SCHEMA,
+    maxTokens: 16384,
+  });
   if (typeof result.modernizedCode !== "string" || typeof result.cloudReadyConfig !== "string") {
     throw agentError("Transformation", "missing 'modernizedCode' or 'cloudReadyConfig'");
   }
