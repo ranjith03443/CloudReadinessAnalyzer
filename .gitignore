@@ -3,3 +3,8 @@ node_modules/
 npm-debug.log*
 .DS_Store
 data/*.json
+data/store.sqlite
+data/store.sqlite-journal
+data/store.sqlite-wal
+data/store.sqlite-shm
+data/outputs/
