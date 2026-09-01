@@ -34,6 +34,79 @@ export function newId() {
   return crypto.randomUUID();
 }
 
+// --- Export run outputs to data/outputs/<run-id> ---------------------------
+function exportRunOutputs(run) {
+  try {
+    if (!run || !run.id) return;
+    const outDir = path.join(__dirname, "outputs", run.id);
+    fs.mkdirSync(outDir, { recursive: true });
+
+    // modernizedCode
+    const modern = run.transformation && run.transformation.modernizedCode;
+    if (typeof modern === "string" && modern.trim().length > 0) {
+      // determine extension: prefer Gate A targetLanguage, else fall back to original file extension
+      let ext = ".txt";
+      const targetLang = run.gateADecision && run.gateADecision.targetLanguage;
+      if (targetLang) {
+        const t = String(targetLang).toLowerCase();
+        if (t.includes("java")) ext = ".java";
+        else if (t.includes("c#") || t.includes("csharp") || t.includes("dotnet") || t.includes("asp.net")) ext = ".cs";
+        else if (t.includes("python")) ext = ".py";
+        else if (t.includes("php")) ext = ".php";
+        else if (t.includes("cobol")) ext = ".cob";
+        else if (t.includes("vb")) ext = ".vb";
+      } else if (run.assessmentRevisions && run.assessmentRevisions.length) {
+        const orig = run.assessmentRevisions[0].inputs && run.assessmentRevisions[0].inputs.fileName;
+        if (orig) {
+          const e = path.extname(orig);
+          if (e) ext = e;
+        }
+      }
+
+      // Use original input's base name when available so exported file matches input name
+      let baseName = "Modernized";
+      if (run.assessmentRevisions && run.assessmentRevisions.length) {
+        const orig = run.assessmentRevisions[0].inputs && run.assessmentRevisions[0].inputs.fileName;
+        if (orig) {
+          try {
+            baseName = path.parse(orig).name;
+          } catch {}
+        }
+      }
+
+      const modernPath = path.join(outDir, `${baseName}${ext}`);
+      fs.writeFileSync(modernPath, modern, "utf8");
+    }
+
+    // cloudReadyConfig
+    const cfg = run.transformation && run.transformation.cloudReadyConfig;
+    if (typeof cfg === "string" && cfg.trim().length > 0) {
+      // prefer YAML filename if it looks like YAML
+      const cfgPath = cfg.trim().startsWith("#") || cfg.includes("spring:") ? path.join(outDir, "application.yml") : path.join(outDir, "cloud-config.txt");
+      fs.writeFileSync(cfgPath, cfg, "utf8");
+    }
+
+    // translationAssumptions (array)
+    const ta = run.transformation && run.transformation.translationAssumptions;
+    if (Array.isArray(ta) && ta.length) {
+      fs.writeFileSync(path.join(outDir, "translationAssumptions.txt"), ta.join("\n"), "utf8");
+    }
+
+    // metadata
+    const meta = {
+      id: run.id,
+      status: run.status || null,
+      gateA: run.gateADecision || null,
+      gateB: run.gateBDecision || null,
+      createdAt: run.createdAt || null,
+    };
+    fs.writeFileSync(path.join(outDir, "metadata.json"), JSON.stringify(meta, null, 2), "utf8");
+  } catch (err) {
+    // best-effort: do not throw, just log to console
+    try { console.error("exportRunOutputs error:", err); } catch {}
+  }
+}
+
 // --- Runs -----------------------------------------------------------------
 
 export function listRuns() {
@@ -48,6 +121,8 @@ export function insertRun(run) {
   const runs = listRuns();
   runs.push(run);
   writeJson(FILES.runs, runs);
+  // export outputs if transformation present
+  try { exportRunOutputs(run); } catch {}
   return run;
 }
 
@@ -58,6 +133,8 @@ export function updateRun(id, updater) {
   if (idx === -1) return null;
   runs[idx] = updater(runs[idx]);
   writeJson(FILES.runs, runs);
+  // export outputs for updated run (best-effort)
+  try { exportRunOutputs(runs[idx]); } catch {}
   return runs[idx];
 }
 

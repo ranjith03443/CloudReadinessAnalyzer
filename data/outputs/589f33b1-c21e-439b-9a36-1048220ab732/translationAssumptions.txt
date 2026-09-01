@@ -1,0 +1,3 @@
+﻿Assumed the original's synchronous request/response flow maps directly onto a Spring Boot @Service method â€” no async boundary was inferred.
+Assumed numeric precision (decimal/currency handling) is equivalent between the source type system and the target's BigDecimal usage; not independently verified.
+Assumed the original caching behavior (now removed) was not relied on for correctness elsewhere in the caller â€” flagged for manual confirmation.

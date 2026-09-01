@@ -1,0 +1,19 @@
+﻿{
+    "gateB":  {
+                  "decidedByRole":  "architect",
+                  "decidedAt":  "2026-08-31T06:30:29.115Z",
+                  "comment":  null
+              },
+    "status":  "approved",
+    "createdAt":  "2026-08-31T06:29:55.517Z",
+    "id":  "589f33b1-c21e-439b-9a36-1048220ab732",
+    "gateA":  {
+                  "action":  "proceed",
+                  "revision":  1,
+                  "migrationType":  "cross-tech",
+                  "targetLanguage":  "Java",
+                  "targetArchitecturePattern":  "PaaS",
+                  "decidedByRole":  "architect",
+                  "decidedAt":  "2026-08-31T06:30:16.623Z"
+              }
+}

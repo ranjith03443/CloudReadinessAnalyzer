@@ -8,7 +8,7 @@ import { cloneRepo, cleanupClone, sweepOrphanedClones, assertLocalDirectory, col
 import { runAssessmentPipeline } from "./agents/assessmentPipeline.js";
 import { runTransformPipeline } from "./agents/transformPipeline.js";
 import { discussStrategy } from "./agents/strategist.js";
-import * as store from "./data/store.js";
+import * as store from "./data/store-sqlite.js";
 import { requireRole, getActingRole } from "./roles.js";
 import * as providers from "./providers.js";
 
