@@ -16,7 +16,7 @@
     "@anthropic-ai/sdk": "^0.32.1",
     "@langchain/core": "^1.1.49",
     "@langchain/langgraph": "^1.4.2",
-    "better-sqlite3": "^13.0.3",
+    "better-sqlite3": "^11.10.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "openai": "^4.77.0"
