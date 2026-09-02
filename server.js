@@ -4,7 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { runPipeline } from "./agents/pipeline.js";
 import { runDemoPipeline, runDemoAssessment, discussStrategyDemo, runDemoTransformation } from "./agents/demo.js";
-import { cloneRepo, cleanupClone, sweepOrphanedClones, assertLocalDirectory, collectSourceFiles } from "./ingest.js";
+import { cloneRepo, cleanupClone, sweepOrphanedClones, assertLocalDirectory, collectSourceFiles, collectConfigFiles } from "./ingest.js";
 import { runAssessmentPipeline } from "./agents/assessmentPipeline.js";
 import { runTransformPipeline } from "./agents/transformPipeline.js";
 import { discussStrategy } from "./agents/strategist.js";
@@ -106,12 +106,16 @@ app.post("/api/ingest", async (req, res) => {
       });
     }
 
+    // Config files (web.config, appsettings*.json, application*.yml, …) are
+    // detected here so the user never has to hand-attach them — see ingest.js.
+    const { config, files: configFiles } = collectConfigFiles(dir);
+
     const fileName =
       sourceType === "repoUrl"
         ? String(repoUrl).split("/").filter(Boolean).pop().replace(/\.git$/i, "")
         : path.basename(dir);
 
-    return res.json({ fileName, code, filesIncluded, filesTotal, truncated });
+    return res.json({ fileName, code, filesIncluded, filesTotal, truncated, config, configFiles });
   } catch (err) {
     return res.status(400).json({ error: err.message || "Ingestion failed." });
   } finally {
@@ -132,6 +136,7 @@ async function runPhase1({
   targetArchitecturePattern,
   preferredMigrationType,
   preferredTargetLanguage,
+  plannerNotes,
   isDemo,
   provider,
   model,
@@ -140,7 +145,7 @@ async function runPhase1({
   let result;
   if (isDemo) {
     result = await runDemoAssessment(
-      { code, config, language, fileName, targetCloud, targetArchitecturePattern, preferredMigrationType, preferredTargetLanguage },
+      { code, config, language, fileName, targetCloud, targetArchitecturePattern, preferredMigrationType, preferredTargetLanguage, plannerNotes },
       send
     );
   } else {
@@ -157,6 +162,7 @@ async function runPhase1({
       targetArchitecturePattern,
       preferredMigrationType,
       preferredTargetLanguage,
+      plannerNotes,
     };
     result = await runAssessmentPipeline(ctx, send);
   }
@@ -188,6 +194,7 @@ app.post("/api/runs", async (req, res) => {
     targetArchitecturePattern,
     preferredMigrationType,
     preferredTargetLanguage,
+    plannerNotes,
     demo,
   } = req.body || {};
   const actingRole = getActingRole(req);
@@ -200,7 +207,7 @@ app.post("/api/runs", async (req, res) => {
     return res.status(400).json({ error: "language is required." });
   }
   if (!targetCloud || !String(targetCloud).trim()) {
-    return res.status(400).json({ error: "targetCloud is required." });
+    return res.status(400).json({ error: "A deployment target is required." });
   }
 
   const selection = resolveProviderSelection({ provider: req.body.provider, model: req.body.model, isDemo });
@@ -220,7 +227,7 @@ app.post("/api/runs", async (req, res) => {
   try {
     const { result, validShape } = await runPhase1({
       code, config, fileName, language, targetCloud, targetArchitecturePattern,
-      preferredMigrationType, preferredTargetLanguage, isDemo, provider, model, send,
+      preferredMigrationType, preferredTargetLanguage, plannerNotes, isDemo, provider, model, send,
     });
 
     if (!validShape) {
@@ -239,7 +246,7 @@ app.post("/api/runs", async (req, res) => {
           revision: 1,
           inputs: {
             code, config, fileName, language, targetCloud, targetArchitecturePattern,
-            preferredMigrationType, preferredTargetLanguage, provider, model,
+            preferredMigrationType, preferredTargetLanguage, plannerNotes, provider, model,
           },
           result,
           createdAt: now,
@@ -298,6 +305,7 @@ app.post("/api/runs/:id/reassess", async (req, res) => {
     targetArchitecturePattern,
     preferredMigrationType,
     preferredTargetLanguage,
+    plannerNotes,
     demo,
   } = req.body || {};
   const actingRole = getActingRole(req);
@@ -310,7 +318,7 @@ app.post("/api/runs/:id/reassess", async (req, res) => {
     return res.status(400).json({ error: "language is required." });
   }
   if (!targetCloud || !String(targetCloud).trim()) {
-    return res.status(400).json({ error: "targetCloud is required." });
+    return res.status(400).json({ error: "A deployment target is required." });
   }
 
   const priorInputs = run.assessmentRevisions[run.assessmentRevisions.length - 1].inputs;
@@ -335,7 +343,7 @@ app.post("/api/runs/:id/reassess", async (req, res) => {
   try {
     const { result, validShape } = await runPhase1({
       code, config, fileName, language, targetCloud, targetArchitecturePattern,
-      preferredMigrationType, preferredTargetLanguage, isDemo, provider, model, send,
+      preferredMigrationType, preferredTargetLanguage, plannerNotes, isDemo, provider, model, send,
     });
 
     if (!validShape) {
@@ -367,7 +375,7 @@ app.post("/api/runs/:id/reassess", async (req, res) => {
           revision,
           inputs: {
             code, config, fileName, language, targetCloud, targetArchitecturePattern,
-            preferredMigrationType, preferredTargetLanguage, provider, model,
+            preferredMigrationType, preferredTargetLanguage, plannerNotes, provider, model,
           },
           result,
           createdAt: now,
@@ -437,6 +445,7 @@ app.post("/api/runs/:id/strategy-chat", async (req, res) => {
         dependencies: result.dependencies,
         targetCloud: inputs.targetCloud,
         targetArchitecturePattern: inputs.targetArchitecturePattern,
+        plannerNotes: inputs.plannerNotes,
         initialRecommendation: {
           recommendedStrategy: result.recommendedStrategy,
           migrationType: result.migrationType,
@@ -592,6 +601,7 @@ app.post("/api/runs/:id/gate-a", requireRole("architect"), async (req, res) => {
       targetLanguage: gateADecision.targetLanguage,
       targetCloud: inputs.targetCloud,
       targetArchitecturePattern: resolvedArchPattern,
+      plannerNotes: inputs.plannerNotes,
     };
 
     let transformResult;

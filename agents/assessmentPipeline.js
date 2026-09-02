@@ -34,6 +34,7 @@ const AssessmentState = Annotation.Root({
   targetArchitecturePattern: Annotation,
   preferredMigrationType: Annotation,
   preferredTargetLanguage: Annotation,
+  plannerNotes: Annotation,
 
   // Code Intelligence outputs
   summary: Annotation,
@@ -173,11 +174,12 @@ export async function runAssessmentPipeline(ctx, onEvent = () => {}) {
     targetArchitecturePattern,
     preferredMigrationType,
     preferredTargetLanguage,
+    plannerNotes,
   } = ctx;
   const telemetry = createTelemetry();
   const start = Date.now();
   const finalState = await graph.invoke(
-    { code, config, language, fileName, targetCloud, targetArchitecturePattern, preferredMigrationType, preferredTargetLanguage },
+    { code, config, language, fileName, targetCloud, targetArchitecturePattern, preferredMigrationType, preferredTargetLanguage, plannerNotes },
     { configurable: { openai, provider, model, onEvent, telemetry } }
   );
   telemetry.totalMs = Date.now() - start;

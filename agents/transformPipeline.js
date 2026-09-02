@@ -18,6 +18,7 @@ const TransformState = Annotation.Root({
   targetLanguage: Annotation,
   targetCloud: Annotation,
   targetArchitecturePattern: Annotation,
+  plannerNotes: Annotation,
 
   // Transformation outputs
   modernizedCode: Annotation,
@@ -82,11 +83,12 @@ export async function runTransformPipeline(ctx, onEvent = () => {}) {
     targetLanguage,
     targetCloud,
     targetArchitecturePattern,
+    plannerNotes,
   } = ctx;
   const telemetry = createTelemetry();
   const start = Date.now();
   const finalState = await graph.invoke(
-    { code, config, language, fileName, findings, migrationType, targetLanguage, targetCloud, targetArchitecturePattern },
+    { code, config, language, fileName, findings, migrationType, targetLanguage, targetCloud, targetArchitecturePattern, plannerNotes },
     { configurable: { openai, provider, model, onEvent, telemetry } }
   );
   telemetry.totalMs = Date.now() - start;

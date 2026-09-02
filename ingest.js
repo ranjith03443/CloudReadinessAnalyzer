@@ -15,6 +15,22 @@ const CLONE_PREFIX = "shiftwise-clone-";
 const CLONE_TIMEOUT_MS = 60_000;
 const MAX_FILES = 200;
 const MAX_BYTES = 2 * 1024 * 1024;
+const CONFIG_MAX_FILES = 25;
+const CONFIG_MAX_BYTES = 256 * 1024;
+
+// Well-known application-config filenames, matched case-insensitively.
+// Deliberately excludes .env — that is usually real secrets, not settings.
+const CONFIG_MATCHERS = [
+  /^appsettings.*\.json$/i,
+  /^application.*\.properties$/i,
+  /^application.*\.ya?ml$/i,
+  /^bootstrap.*\.ya?ml$/i,
+  /\.config$/i, // web.config, app.config, nlog.config, log4net.config, …
+];
+
+function isConfigFile(name) {
+  return CONFIG_MATCHERS.some((re) => re.test(name));
+}
 
 const SKIP_DIRS = new Set([
   ".git", "node_modules", "bin", "obj", "dist", "build", "target",
@@ -181,4 +197,54 @@ export function collectSourceFiles(dir, language) {
     filesTotal,
     truncated: filesIncluded < filesTotal,
   };
+}
+
+function walkConfig(dir, results) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) continue;
+      walkConfig(path.join(dir, entry.name), results);
+    } else if (isConfigFile(entry.name)) {
+      results.push(path.join(dir, entry.name));
+    }
+  }
+}
+
+// Walks `dir` for well-known config files and concatenates them with the same
+// "// ===== path =====" header convention collectSourceFiles uses, capped at
+// CONFIG_MAX_FILES / CONFIG_MAX_BYTES. Returns { config, files } where `files`
+// is the list of repo-relative paths actually included.
+export function collectConfigFiles(dir) {
+  const found = [];
+  walkConfig(dir, found);
+  found.sort();
+
+  const parts = [];
+  const files = [];
+  let bytesUsed = 0;
+
+  for (const file of found) {
+    if (files.length >= CONFIG_MAX_FILES) break;
+    let content;
+    try {
+      content = fs.readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    const rel = path.relative(dir, file).split(path.sep).join("/");
+    const chunk = `// ===== ${rel} =====\n${content}\n`;
+    const chunkBytes = Buffer.byteLength(chunk, "utf8");
+    if (bytesUsed + chunkBytes > CONFIG_MAX_BYTES) break;
+    parts.push(chunk);
+    files.push(rel);
+    bytesUsed += chunkBytes;
+  }
+
+  return { config: parts.join("\n"), files };
 }

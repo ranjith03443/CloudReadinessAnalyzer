@@ -16,6 +16,7 @@ const SECRET_STORE_BY_CLOUD = {
   Azure: "Azure Key Vault",
   AWS: "AWS Secrets Manager",
   GCP: "GCP Secret Manager",
+  "On-premise / portable": "a self-hosted secret store such as HashiCorp Vault or Kubernetes Secrets",
 };
 
 function buildSystem({ migrationType, targetLanguage, targetCloud }) {
@@ -72,11 +73,18 @@ export async function modernize({
   migrationType = "same-language",
   targetLanguage = null,
   targetCloud = null,
+  plannerNotes = null,
 }) {
   const system = buildSystem({ migrationType, targetLanguage, targetCloud });
+  const notesBlock =
+    plannerNotes && String(plannerNotes).trim()
+      ? `\n\n--- NOTES FROM THE HUMAN (guidelines / constraints — follow these: target versions, banned tech, etc.) ---\n${String(plannerNotes).trim()}`
+      : "";
   const user =
     buildSourceBlock({ code, config, language, fileName }) +
     `\n\nMigration type: ${migrationType}${targetLanguage ? ` (target language: ${targetLanguage})` : ""}` +
+    `\nDeployment target: ${targetCloud || "(not specified)"}` +
+    notesBlock +
     "\n\n--- ISSUES DETECTED BY THE CODE INTELLIGENCE AGENT ---\n" +
     JSON.stringify(findings || [], null, 2);
 

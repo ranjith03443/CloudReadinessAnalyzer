@@ -9,8 +9,10 @@ const els = {
   selectFolderBtn: $("selectFolderBtn"),
   folderInfo: $("folderInfo"),
   code: $("code"),
-  configFile: $("configFile"),
-  config: $("config"),
+  plannerNotes: $("plannerNotes"),
+  detectedConfigWrap: $("detectedConfigWrap"),
+  detectedConfigChips: $("detectedConfigChips"),
+  detectedConfigNote: $("detectedConfigNote"),
   analyzeBtn: $("analyzeBtn"),
   runDemoBtn: $("runDemoBtn"),
   loadSampleBtn: $("loadSampleBtn"),
@@ -505,10 +507,10 @@ function startNewRun() {
   ingestedFileName = null;
 
   els.code.value = "";
-  els.config.value = "";
   els.codeFile.value = "";
   els.codeFolder.value = "";
-  els.configFile.value = "";
+  if (els.plannerNotes) els.plannerNotes.value = "";
+  clearIngestedConfig();
   if (els.folderInfo) els.folderInfo.textContent = "";
   const repoInfo = $("ingestInfo-repoUrl");
   const localInfo = $("ingestInfo-localPath");
@@ -553,10 +555,14 @@ function duplicateAsNewRun() {
 
   setSourceMode("paste");
   els.code.value = inputs.code || "";
-  els.config.value = inputs.config || "";
+  ingestedConfig = inputs.config || "";
+  ingestedConfigFiles = Array.isArray(inputs.configFiles) ? inputs.configFiles : [];
+  renderDetectedConfig(ingestedConfigFiles.length ? ingestedConfigFiles : null);
+  if (els.plannerNotes) els.plannerNotes.value = inputs.plannerNotes || "";
   lastOriginalCode = inputs.code || "";
   if (inputs.language) els.language.value = inputs.language;
   if (inputs.targetCloud) els.targetCloud.value = inputs.targetCloud;
+  refreshArchitecturePatternOptions();
   els.targetArchitecturePattern.value = inputs.targetArchitecturePattern || "";
 
   const goal = inputs.preferredMigrationType === "cross-tech" ? "cross-tech" : inputs.preferredMigrationType === "same-language" ? "cloud-readiness" : "unsure";
@@ -624,6 +630,13 @@ let liveTokenTotal = 0;
 // combinedFileName() can prefer it over the upload-based file inputs.
 let ingestedFileName = null;
 
+// Config is no longer entered by hand — it's whatever /api/ingest detected in
+// the ingested source (web.config, appsettings*.json, application*.yml, …).
+// ingestedConfigFiles is the display list; ingestedConfig is the combined text
+// sent to the pipeline. Both reset on New Run and on a fresh upload/ingest.
+let ingestedConfig = "";
+let ingestedConfigFiles = [];
+
 const SEVERITY = {
   High: { text: "text-danger", bg: "bg-danger/15", dot: "bg-danger", border: "border-danger/30" },
   Medium: { text: "text-amber", bg: "bg-amber/15", dot: "bg-amber", border: "border-amber/30" },
@@ -647,16 +660,6 @@ function scoreColor(score) {
   if (score >= 75) return { stroke: "#4ADE80", text: "text-green" };
   if (score >= 45) return { stroke: "#FCD34D", text: "text-amber" };
   return { stroke: "#EF4444", text: "text-danger" };
-}
-
-function readFile(input, target) {
-  const file = input.files && input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    target.value = reader.result;
-  };
-  reader.readAsText(file);
 }
 
 function readText(file) {
@@ -735,6 +738,7 @@ els.codeFile.addEventListener("change", () => {
   els.codeFolder.value = "";
   els.folderInfo.textContent = "";
   ingestedFileName = null;
+  clearIngestedConfig();
   readCodeFiles(els.codeFile, els.code).catch(() =>
     showError("Could not read one of the selected files.")
   );
@@ -746,6 +750,7 @@ els.codeFolder.addEventListener("change", async () => {
   // A fresh folder selection supersedes any previous file pick or ingest.
   els.codeFile.value = "";
   ingestedFileName = null;
+  clearIngestedConfig();
   try {
     const count = await readCodeFolder(els.codeFolder, els.code);
     if (count === 0) {
@@ -760,17 +765,14 @@ els.codeFolder.addEventListener("change", async () => {
   }
 });
 
-els.configFile.addEventListener("change", () => readFile(els.configFile, els.config));
-
 els.loadSampleBtn.addEventListener("click", async () => {
   try {
     const isJava = els.language.value === "Java";
     const codePath = isJava ? "samples/LegacyOrderService.java" : "samples/LegacyOrderService.cs";
-    const cfgPath = isJava ? "samples/application.properties" : "samples/web.config";
-    const [codeRes, cfgRes] = await Promise.all([fetch(codePath), fetch(cfgPath)]);
+    const codeRes = await fetch(codePath);
     if (codeRes.ok) els.code.value = await codeRes.text();
-    if (cfgRes.ok) els.config.value = await cfgRes.text();
     ingestedFileName = null;
+    clearIngestedConfig();
   } catch {
     showError("Could not load the sample file.");
   }
@@ -848,6 +850,65 @@ if (migrationGoalTabs) {
   els.language.addEventListener("change", refreshPreferredTargetLanguageOptions);
 }
 
+// --- Deployment target → architecture pattern -------------------------------
+// Serverless / PaaS only make sense for a public cloud; an on-premise /
+// portable target offers Containers or Virtual machines instead. Rebuild the
+// pattern <select> whenever the deployment target changes, keeping the current
+// choice if it's still valid.
+const ARCH_PATTERNS_CLOUD = ["Containers", "PaaS", "Serverless"];
+const ARCH_PATTERNS_ONPREM = ["Containers", "Virtual machines"];
+const ONPREM_TARGET = "On-premise / portable";
+
+function refreshArchitecturePatternOptions() {
+  const sel = els.targetArchitecturePattern;
+  if (!sel || !els.targetCloud) return;
+  const prev = sel.value;
+  const patterns = els.targetCloud.value === ONPREM_TARGET ? ARCH_PATTERNS_ONPREM : ARCH_PATTERNS_CLOUD;
+  sel.innerHTML =
+    `<option value="">Let AI recommend</option>` +
+    patterns.map((p) => `<option value="${p}">${p}</option>`).join("");
+  sel.value = patterns.includes(prev) ? prev : "";
+}
+
+if (els.targetCloud) {
+  els.targetCloud.addEventListener("change", refreshArchitecturePatternOptions);
+  refreshArchitecturePatternOptions();
+}
+
+// Renders the read-only "config files auto-detected" chip list under the
+// source panel. `files` is an array of repo-relative paths (empty array ⇒
+// "none found"); pass null to hide the block entirely (upload / paste modes,
+// or before any ingest).
+function renderDetectedConfig(files) {
+  if (!els.detectedConfigWrap) return;
+  if (files == null) {
+    els.detectedConfigWrap.classList.add("hidden");
+    els.detectedConfigChips.innerHTML = "";
+    els.detectedConfigNote.textContent = "";
+    return;
+  }
+  els.detectedConfigWrap.classList.remove("hidden");
+  if (!files.length) {
+    els.detectedConfigChips.innerHTML = "";
+    els.detectedConfigNote.textContent = "No config files found in the ingested source.";
+    return;
+  }
+  els.detectedConfigChips.innerHTML = files
+    .map(
+      (f) =>
+        `<span class="rounded-md border border-white/15 bg-navy-deep px-2 py-1 font-mono text-[11px] text-slate-300">${esc(f)}</span>`
+    )
+    .join("");
+  els.detectedConfigNote.textContent =
+    "Found in the ingested source and included in the analysis automatically.";
+}
+
+function clearIngestedConfig() {
+  ingestedConfig = "";
+  ingestedConfigFiles = [];
+  renderDetectedConfig(null);
+}
+
 // Calls POST /api/ingest and, on success, loads the combined source into the
 // code textarea exactly as a file/folder upload would — same downstream path
 // (analyze() just reads els.code.value), so nothing else needs to know the
@@ -874,6 +935,9 @@ async function ingestSource(payload, infoEl, btnEl) {
     }
     els.code.value = data.code;
     ingestedFileName = data.fileName;
+    ingestedConfig = data.config || "";
+    ingestedConfigFiles = Array.isArray(data.configFiles) ? data.configFiles : [];
+    renderDetectedConfig(ingestedConfigFiles);
     infoEl.textContent = data.truncated
       ? `included ${data.filesIncluded} of ${data.filesTotal} matching files (capped)`
       : `included ${data.filesIncluded} of ${data.filesTotal} matching file${data.filesTotal === 1 ? "" : "s"}`;
@@ -1090,10 +1154,9 @@ if (els.runDemoBtn) els.runDemoBtn.addEventListener("click", () => analyze(true,
 async function loadSample() {
   const isJava = els.language.value === "Java";
   const codePath = isJava ? "samples/LegacyOrderService.java" : "samples/LegacyOrderService.cs";
-  const cfgPath = isJava ? "samples/application.properties" : "samples/web.config";
-  const [codeRes, cfgRes] = await Promise.all([fetch(codePath), fetch(cfgPath)]);
+  const codeRes = await fetch(codePath);
   if (codeRes.ok) els.code.value = await codeRes.text();
-  if (cfgRes.ok) els.config.value = await cfgRes.text();
+  clearIngestedConfig();
 }
 
 // Consumes an NDJSON pipeline stream (shared by /api/runs and reassess),
@@ -1137,11 +1200,13 @@ function currentRunInputs() {
   const preferredTargetLanguageEl = $("preferredTargetLanguage");
   return {
     code: els.code.value.trim(),
-    config: els.config.value.trim(),
+    config: ingestedConfig || "",
+    configFiles: ingestedConfigFiles,
     fileName: combinedFileName(),
     language: els.language.value,
     targetCloud: els.targetCloud.value,
     targetArchitecturePattern: els.targetArchitecturePattern.value || null,
+    plannerNotes: els.plannerNotes ? els.plannerNotes.value.trim() : "",
     provider: els.aiProvider ? els.aiProvider.value : undefined,
     model: els.aiModel ? els.aiModel.value : undefined,
     preferredMigrationType: migrationGoal === "unsure" ? null : migrationGoal === "cross-tech" ? "cross-tech" : "same-language",

@@ -83,7 +83,7 @@
         </nav>
 
         <div class="mt-auto font-mono text-[11px] uppercase tracking-[0.15em] text-slate-500">
-          <div>Local · Multi-language → Cloud</div>
+          <div>Local · Multi-language → Modernized</div>
           <div id="modelTag" class="mt-1 text-cyan/80">model: …</div>
         </div>
       </aside>
@@ -130,7 +130,10 @@
 
           <p id="inputError" class="mb-4 hidden text-sm text-danger"></p>
 
-          <!-- Source & Code card: the bulk of the input, gets the full width. -->
+          <!-- Source & Code + Target & Goal sit side by side on wide screens
+               (Source wider), and stack below `lg`. -->
+          <div class="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
+
           <section class="rounded-lg border border-white/10 bg-navy-panel/60 p-5">
             <div class="font-mono text-xs uppercase tracking-[0.2em] text-cyan/70">Source &amp; Code</div>
 
@@ -177,7 +180,7 @@
 
             <!-- Only the active tab's panel shows — switching tabs replaces
                  this area instead of stacking every source option at once. -->
-            <div class="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div class="mt-4">
               <div>
                 <!-- Upload mode: file/folder picker only. -->
                 <div id="sourcePanel-upload" class="source-panel">
@@ -274,36 +277,29 @@
                 </div>
               </div>
 
-              <div>
-                <label class="block text-sm font-medium text-slate-300">
-                  Config file <span class="text-slate-500">(optional — web.config, app.config, .properties, .yml, etc.)</span>
-                </label>
-                <p class="mt-0.5 text-[11px] text-slate-500">Applies regardless of source mode — ingestion doesn't auto-detect config files yet.</p>
-                <input
-                  id="configFile"
-                  type="file"
-                  accept=".config,.xml,.properties,.json,.txt"
-                  class="mt-2 block w-full text-sm text-slate-400 file:mr-3 file:rounded-md file:border-0 file:bg-white/5 file:px-3 file:py-2 file:text-slate-300 hover:file:bg-white/10"
-                />
-                <textarea
-                  id="config"
-                  rows="11"
-                  placeholder="…or paste your config here"
-                  class="mt-2 w-full resize-y rounded-md border border-white/15 bg-navy-deep px-3 py-2 font-mono text-xs leading-relaxed focus:border-cyan focus:outline-none"
-                ></textarea>
+            </div>
+
+            <!-- Config files (web.config, appsettings*.json, application*.yml,
+                 …) are auto-detected during ingestion — read-only here. -->
+            <div id="detectedConfigWrap" class="mt-5 hidden border-t border-white/10 pt-4">
+              <div class="flex items-center gap-2">
+                <span class="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-500">Config files</span>
+                <span class="rounded-full border border-green/30 bg-green/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-green">auto-detected</span>
               </div>
+              <div id="detectedConfigChips" class="mt-2 flex flex-wrap gap-1.5"></div>
+              <p id="detectedConfigNote" class="mt-2 text-[11px] leading-snug text-slate-500"></p>
             </div>
           </section>
 
-          <!-- Target & Goal: its own full-width card now that AI Provider
-               moved up top, so it isn't squeezed to half width. -->
-          <section class="mt-4 rounded-lg border border-white/10 bg-navy-panel/60 p-5">
+          <!-- Target & Goal: sits beside Source & Code on wide screens; its
+               fields stack vertically since the column is narrower. -->
+          <section class="rounded-lg border border-white/10 bg-navy-panel/60 p-5">
             <div class="font-mono text-xs uppercase tracking-[0.2em] text-cyan/70">Target &amp; Goal</div>
 
-            <div class="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_1fr_1fr]">
+            <div class="mt-4 space-y-5">
               <div>
                 <label class="block text-sm font-medium text-slate-300">Migration goal</label>
-                <div id="migrationGoalTabs" class="mt-1 flex gap-1 rounded-md border border-white/10 bg-navy-deep p-1">
+                <div id="migrationGoalTabs" class="mt-1 flex flex-col gap-1 rounded-md border border-white/10 bg-navy-deep p-1 sm:flex-row">
                   <button type="button" data-migration-goal="unsure" class="migration-goal-btn flex-1 rounded px-2 py-1.5 font-mono text-[11px] uppercase tracking-wider transition">
                     Let AI decide
                   </button>
@@ -314,7 +310,7 @@
                     Cross-Tech
                   </button>
                 </div>
-                <p class="mt-1 text-[11px] text-slate-500">
+                <p class="mt-1 text-[11px] leading-snug text-slate-500">
                   <span class="text-slate-400">Cloud Readiness</span> modernizes in place (same language). <span class="text-slate-400">Cross-Tech</span> rewrites into a different language. Either way the Strategy Planner reviews it against the actual code and says so if it disagrees.
                 </p>
                 <div id="preferredTargetLanguageWrap" class="hidden mt-2">
@@ -333,7 +329,7 @@
                 </div>
               </div>
               <div>
-                <label class="block text-sm font-medium text-slate-300">Target cloud</label>
+                <label class="block text-sm font-medium text-slate-300">Deployment target</label>
                 <select
                   id="targetCloud"
                   class="mt-1 w-full rounded-md border border-white/15 bg-navy-deep px-3 py-2 text-sm focus:border-cyan focus:outline-none"
@@ -341,8 +337,11 @@
                   <option value="Azure">Azure</option>
                   <option value="AWS">AWS</option>
                   <option value="GCP">GCP</option>
+                  <option value="On-premise / portable">On-premise / portable</option>
                 </select>
-                <p class="mt-1 text-[11px] text-slate-500">Applies either way — even a Cross-Tech rewrite still needs a cloud target.</p>
+                <p class="mt-1 text-[11px] leading-snug text-slate-500">
+                  Where the modernized app will run. <span class="text-slate-400">On-premise / portable</span> keeps the recommendation vendor-neutral — self-hosted containers or VMs, config via environment variables + a secret store, no managed-cloud services assumed.
+                </p>
               </div>
               <div>
                 <label class="block text-sm font-medium text-slate-300">Architecture pattern</label>
@@ -355,9 +354,25 @@
                   <option value="PaaS">PaaS</option>
                   <option value="Serverless">Serverless</option>
                 </select>
+                <p class="mt-1 text-[11px] leading-snug text-slate-500">Serverless and PaaS apply only to a public-cloud target.</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-slate-300">
+                  Notes for the planner <span class="text-slate-500">(optional)</span>
+                </label>
+                <textarea
+                  id="plannerNotes"
+                  rows="4"
+                  placeholder="e.g. Java shop — target Java 21 + Spring Boot 3. Avoid serverless. Deploy to our on-prem OpenShift cluster. Data must stay in our datacenter."
+                  class="mt-1 w-full resize-y rounded-md border border-white/15 bg-navy-deep px-3 py-2 font-mono text-xs leading-relaxed focus:border-cyan focus:outline-none"
+                ></textarea>
+                <p class="mt-1 text-[11px] leading-snug text-slate-500">
+                  Guidelines or constraints for the recommendation — org preferences, target versions, priority. Steers it when you're unsure, fine-tunes it when you've picked a goal. Leave blank and the planner works from the code alone.
+                </p>
               </div>
             </div>
           </section>
+          </div>
         </div>
 
         <!-- Working: takes over the full content area while a run is in

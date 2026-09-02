@@ -6,10 +6,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "sync": "git pull --rebase && npm ci"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20 <21"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

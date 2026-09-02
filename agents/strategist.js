@@ -8,7 +8,10 @@ import { runJsonAgent, buildSourceBlock, agentError } from "./shared.js";
 
 const SIX_R = ["Rehost", "Replatform", "Refactor", "Rebuild", "Retire", "Retain"];
 const TARGET_LANGUAGES = [".NET", "Java", "COBOL", "VB6 / VB.NET", "PHP", "Python"];
-const ARCHITECTURE_PATTERNS = ["Containers", "PaaS", "Serverless"];
+// "On-premise / portable" is a valid deployment target alongside the clouds —
+// it means "vendor-neutral, self-hosted", and its architecture options are
+// Containers or Virtual machines (no managed PaaS / Serverless).
+const ARCHITECTURE_PATTERNS = ["Containers", "PaaS", "Serverless", "Virtual machines"];
 
 function buildContext({
   code,
@@ -21,15 +24,21 @@ function buildContext({
   targetArchitecturePattern,
   preferredMigrationType,
   preferredTargetLanguage,
+  plannerNotes,
 }) {
   const preferenceLine = preferredMigrationType
     ? `\nHuman's stated migration goal: ${preferredMigrationType === "cross-tech" ? `Cross-Tech Migration (rewrite to ${preferredTargetLanguage || "a different language"})` : "Cloud Readiness (modernize in place, same language)"}`
     : "\nHuman's stated migration goal: (none — let AI decide)";
+  const notesBlock =
+    plannerNotes && String(plannerNotes).trim()
+      ? `\n\n--- NOTES FROM THE HUMAN (guidelines / constraints — honor these unless the code makes them impossible) ---\n${String(plannerNotes).trim()}`
+      : "";
   return (
     buildSourceBlock({ code, config, language, fileName }) +
-    `\n\nTarget Cloud: ${targetCloud || "(not specified)"}` +
+    `\n\nDeployment target: ${targetCloud || "(not specified)"}` +
     `\nTarget Architecture Pattern: ${targetArchitecturePattern || "Let AI recommend"}` +
     preferenceLine +
+    notesBlock +
     "\n\n--- ISSUES DETECTED BY THE CODE INTELLIGENCE AGENT ---\n" +
     JSON.stringify(findings || [], null, 2) +
     "\n\n--- DEPENDENCIES FOUND BY THE DEPENDENCY ANALYSIS AGENT ---\n" +
@@ -49,7 +58,11 @@ If you recommend "cross-tech", choose exactly one target language from this list
 
 The human may have stated a migration goal preference below (or left it as "let AI decide"). If they stated one, generally HONOR it — it is a real input, not decoration. Only recommend something different if the code has a concrete, specific blocker that makes their stated goal clearly wrong (e.g. they want same-language but the code is inseparable from a Windows-only COM API; or they want a cross-tech rewrite but nothing in the findings justifies the added risk over a same-language fix). When you do deviate from their stated goal, say so explicitly and plainly at the start of the justification — do not silently substitute your own preference. If no goal was stated, recommend based on the code alone as normal.
 
-Ground your target architecture recommendation in the supplied Target Cloud and Target Architecture Pattern. If you would recommend a different pattern than what was selected, say so explicitly in the justification rather than silently substituting your own choice.
+Ground your target architecture recommendation in the supplied Deployment target and Target Architecture Pattern. If you would recommend a different pattern than what was selected, say so explicitly in the justification rather than silently substituting your own choice.
+
+The Deployment target may be a public cloud (Azure / AWS / GCP) OR "On-premise / portable". When it is "On-premise / portable", do NOT name managed cloud services — recommend a vendor-neutral setup instead (self-hosted containers on Kubernetes/Docker or plain VMs, a database you run, config via environment variables plus a secret store such as HashiCorp Vault or Kubernetes Secrets, a reverse proxy / load balancer you operate).
+
+If the human left NOTES above, treat them as real requirements — target language/framework versions, banned technologies, cost or data-residency constraints, priority. Follow them unless a specific finding makes that impossible, and if you cannot, say why in the justification.
 
 Return ONLY a JSON object with this exact shape:
 {
@@ -62,7 +75,7 @@ Return ONLY a JSON object with this exact shape:
 
 Rules:
 - "targetLanguage" is null unless migrationType is "cross-tech".
-- "targetArchitecture" is a concrete, short recommendation naming real services (e.g. "Azure Kubernetes Service (AKS) + Azure SQL + Key Vault", "AWS ECS Fargate + RDS PostgreSQL + Secrets Manager", "GCP Cloud Run + Cloud SQL + Secret Manager"), consistent with the Target Cloud / Target Architecture Pattern supplied.
+- "targetArchitecture" is a concrete, short recommendation consistent with the Deployment target / Target Architecture Pattern supplied. For a cloud target, name real services (e.g. "Azure Kubernetes Service (AKS) + Azure SQL + Key Vault", "AWS ECS Fargate + RDS PostgreSQL + Secrets Manager", "GCP Cloud Run + Cloud SQL + Secret Manager"). For an on-premise / portable target, name vendor-neutral infrastructure (e.g. "Kubernetes (containers) + PostgreSQL + HashiCorp Vault + NGINX ingress", "Docker Compose on VMs + PostgreSQL + Vault").
 - "justification" is 2-4 sentences grounded in the SPECIFIC findings and dependencies supplied — reference concrete issues, not generic advice.
 - Return valid JSON only, no markdown.`;
 
@@ -118,7 +131,7 @@ Return ONLY a JSON object with this exact shape:
   "reply": string,
   "suggestedMigrationType": "same-language" | "cross-tech",
   "suggestedTargetLanguage": string | null,
-  "suggestedTargetArchitecturePattern": "Containers" | "PaaS" | "Serverless" | null
+  "suggestedTargetArchitecturePattern": "Containers" | "PaaS" | "Serverless" | "Virtual machines" | null
 }
 
 Rules:
@@ -151,12 +164,13 @@ export async function discussStrategy({
   dependencies,
   targetCloud,
   targetArchitecturePattern,
+  plannerNotes,
   initialRecommendation,
   conversation,
   userMessage,
 }) {
   const context =
-    buildContext({ code, config, language, fileName, findings, dependencies, targetCloud, targetArchitecturePattern }) +
+    buildContext({ code, config, language, fileName, findings, dependencies, targetCloud, targetArchitecturePattern, plannerNotes }) +
     "\n\n--- YOUR INITIAL RECOMMENDATION ---\n" +
     JSON.stringify(initialRecommendation || {}, null, 2) +
     "\n\n--- CONVERSATION SO FAR ---\n" +

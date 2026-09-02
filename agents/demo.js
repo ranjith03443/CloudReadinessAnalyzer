@@ -564,6 +564,7 @@ function templateTargetArchitecture(text, ctx) {
     Azure: "Azure App Service (Linux) + Azure SQL Database + Azure Key Vault",
     AWS: "AWS ECS Fargate + Amazon RDS + AWS Secrets Manager",
     GCP: "GCP Cloud Run + Cloud SQL + Secret Manager",
+    "On-premise / portable": "Self-hosted Kubernetes (containers) + PostgreSQL + HashiCorp Vault + NGINX ingress",
   };
   return byCloud[cloud] || text;
 }
