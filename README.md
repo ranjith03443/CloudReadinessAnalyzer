@@ -149,6 +149,10 @@ CloudReadinessAnalyzer/
 ├── ingest.js                    # git clone / local folder ingestion
 ├── package.json
 ├── .env.example                 # copy to .env and add at least one provider's credentials
+├── prompts/                     # versioned agent system prompts (data, not code)
+│   ├── active.json              # pointer: which prompt version each agent loads
+│   ├── loader.js                # getPrompt(agent, key, vars), imported by the agents
+│   └── <agent>/v1.json          # one folder per agent, numbered version files
 ├── agents/
 │   ├── assessmentPipeline.js    # Phase 1 graph: detect+dependency → score+strategize → estimate
 │   ├── transformPipeline.js     # Phase 2 graph: modernize → validate

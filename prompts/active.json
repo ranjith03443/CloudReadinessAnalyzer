@@ -1,0 +1,9 @@
+{
+  "detector": "v1",
+  "dependency": "v1",
+  "scorer": "v1",
+  "estimator": "v1",
+  "strategist": "v1",
+  "modernizer": "v1",
+  "validator": "v1"
+}

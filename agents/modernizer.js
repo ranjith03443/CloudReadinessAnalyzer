@@ -1,4 +1,5 @@
 import { runJsonAgent, buildSourceBlock, agentError } from "./shared.js";
+import { getPrompt } from "../prompts/loader.js";
 
 // Same result shape in both same-language and cross-tech mode (see
 // buildSystem below) — one schema covers both.
@@ -19,46 +20,12 @@ const SECRET_STORE_BY_CLOUD = {
   "On-premise / portable": "a self-hosted secret store such as HashiCorp Vault or Kubernetes Secrets",
 };
 
+// System prompts live in prompts/modernizer/<active version>.json — see prompts/README.md.
+// {{targetLanguage}} / {{secretStore}} are filled from the confirmed Gate A choices.
 function buildSystem({ migrationType, targetLanguage, targetCloud }) {
   const secretStore = SECRET_STORE_BY_CLOUD[targetCloud] || "a managed secret store";
-
-  if (migrationType === "cross-tech") {
-    return `You are the TRANSFORMATION agent in a multi-agent cloud-migration pipeline, operating in CROSS-TECH mode: a human confirmed at Gate A that this code should be REWRITTEN from its source language into ${targetLanguage}, not just modernized in place. A Code Intelligence agent has already identified issues (provided to you). Your job is ONLY to produce a faithful logic translation into ${targetLanguage} plus its cloud-ready configuration. Do NOT compute a score and do NOT re-list findings.
-
-Translate the supplied code's logic into idiomatic, modern, cloud-native ${targetLanguage}, addressing the detected issues along the way. Externalize configuration to environment variables and/or ${secretStore} references. Because this is a full language translation — not a mechanical rewrite — be conservative: where you are not fully confident the translation preserves the original behavior, note it explicitly rather than silently guessing.
-
-Return ONLY a JSON object with this exact shape:
-{
-  "modernizedCode": string,
-  "cloudReadyConfig": string,
-  "translationAssumptions": string[]
-}
-
-Rules:
-- Use real newlines inside string values.
-- "modernizedCode" is the full ${targetLanguage} rewrite of the supplied code's logic.
-- "cloudReadyConfig" externalizes configuration for the rewritten code.
-- "translationAssumptions" lists every place you had to make a judgment call, infer intent, or could not fully verify behavioral equivalence (e.g. "assumed X library's Y method matches the original's Z call semantics"). For a genuine cross-language rewrite this list is rarely empty — an empty array should be rare, not the default.
-- Return valid JSON only, no markdown.`;
-  }
-
-  return `You are the TRANSFORMATION agent in a multi-agent cloud-migration pipeline, operating in SAME-LANGUAGE mode: a human confirmed at Gate A that this code should be modernized in place, keeping its current language/platform. A Code Intelligence agent has already identified issues (provided to you). Your job is ONLY to produce the modernized, cloud-ready version of the supplied code and its configuration. Do NOT compute a score and do NOT re-list findings.
-
-Target an idiomatic, modern, cloud-native version of the SAME language/platform. Externalize configuration to environment variables and/or ${secretStore} references. Address the detected issues in the rewrite.
-
-Return ONLY a JSON object with this exact shape:
-{
-  "modernizedCode": string,
-  "cloudReadyConfig": string,
-  "translationAssumptions": []
-}
-
-Rules:
-- Use real newlines inside string values.
-- "modernizedCode" must be the full, idiomatic, cloud-ready rewrite of the supplied code, in the SAME language.
-- "cloudReadyConfig" externalizes configuration. If no config was provided, infer the config implied by the code.
-- "translationAssumptions" is always an empty array in this mode — there is no language change to flag.
-- Return valid JSON only, no markdown.`;
+  const key = migrationType === "cross-tech" ? "systemCrossTech" : "systemSameLanguage";
+  return getPrompt("modernizer", key, { targetLanguage: targetLanguage || "", secretStore });
 }
 
 export async function modernize({

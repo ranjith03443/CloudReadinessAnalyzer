@@ -5,6 +5,7 @@
 // count vs. the original) is checked too, and manual review is always
 // recommended — a full language translation can't be verified deterministically.
 import { runJsonAgent, buildSourceBlock, agentError } from "./shared.js";
+import { getPrompt } from "../prompts/loader.js";
 
 function bracesBalanced(code) {
   let depth = 0;
@@ -74,20 +75,8 @@ export function runStaticChecks({ originalCode, modernizedCode, migrationType })
   return { checks, structuralParity };
 }
 
-const SYSTEM = `You are the VALIDATION agent in a multi-agent cloud-migration pipeline. Code Intelligence and Transformation agents have already run (their findings and the modernized code are provided to you, along with deterministic static-check results). Your job is ONLY to assess whether the modernized code plausibly resolves the ORIGINAL findings. Do NOT rewrite code and do NOT invent new findings.
-
-Return ONLY a JSON object with this exact shape:
-{
-  "findingResolutions": [ { "findingId": string, "resolved": boolean, "note": string } ],
-  "manualReviewRecommended": boolean,
-  "summary": string
-}
-
-Rules:
-- "findingResolutions" must contain exactly one entry per supplied finding, using the same "findingId" values, judging whether the modernized code plausibly resolves each one.
-- "manualReviewRecommended" should be true if any high-severity finding was not resolved, or if you have material doubts about the rewrite — independent of the deterministic static checks, which are already factored in separately.
-- "summary" is 2-4 sentences: overall confidence in the modernization, and what a human reviewer should focus on.
-- Return valid JSON only, no markdown.`;
+// System prompt lives in prompts/validator/<active version>.json — see prompts/README.md.
+const SYSTEM = getPrompt("validator", "system");
 
 const RESULT_SCHEMA = {
   type: "object",

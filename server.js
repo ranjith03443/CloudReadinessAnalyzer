@@ -11,6 +11,7 @@ import { discussStrategy } from "./agents/strategist.js";
 import * as store from "./data/store-sqlite.js";
 import { requireRole, getActingRole } from "./roles.js";
 import * as providers from "./providers.js";
+import { promptVersions } from "./prompts/loader.js";
 
 dotenv.config();
 
@@ -849,5 +850,9 @@ app.listen(PORT, () => {
     console.log(`  Provider:    ${providers.PROVIDERS[selection.provider]?.label || selection.provider}`);
     console.log(`  Model:       ${selection.model}`);
   }
+  const versions = promptVersions();
+  console.log(
+    `  Prompts:     ${Object.entries(versions).map(([id, v]) => `${id}@${v}`).join("  ")}`
+  );
   console.log("");
 });

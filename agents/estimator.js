@@ -3,26 +3,10 @@
 // cross-tech rewrite should size very differently than a same-language
 // modernization of the same code.
 import { runJsonAgent, buildSourceBlock, agentError } from "./shared.js";
+import { getPrompt } from "../prompts/loader.js";
 
-const SYSTEM = `You are the ESTIMATION agent in a multi-agent cloud-migration assessment pipeline. Code Intelligence, Dependency Analysis and Strategy Planner agents have already run (their output is provided to you). Your job is ONLY to size the effort required to carry out the RECOMMENDED migration approach. Do NOT rewrite code, detect issues, or choose the strategy yourself.
-
-Return ONLY a JSON object with this exact shape:
-{
-  "effortDaysLow": number,
-  "effortDaysHigh": number,
-  "confidence": "Low" | "Medium" | "High",
-  "rationale": string,
-  "tasks": [ { "task": string, "effortDays": number } ]
-}
-
-Rules:
-- Size the effort for the SUPPLIED recommended migration type/target below, not a hypothetical alternative.
-- "effortDaysLow"/"effortDaysHigh" are a realistic range in developer-days for ONE file/component (can be fractional, e.g. 0.5). Low <= High. Most same-language remediations take a fraction of a day up to a few days; only approach ~5+ days when the file is large and effectively needs a rewrite.
-- A "cross-tech" migration type (rewriting to a different language) should generally carry a noticeably WIDER range and MORE effort than a "same-language" one for comparable code, since full logic translation carries materially more risk than in-place modernization.
-- "tasks" breaks the work into 2-6 concrete items, each with its own "effortDays"; items should roughly add up to the estimated range.
-- "confidence" reflects how well-scoped the work is: more high-severity unknowns, or a "cross-tech" migration type, should generally lower confidence relative to a well-understood same-language change.
-- "rationale" is one or two sentences explaining the estimate; if migrationType is "cross-tech", say so and note the extra risk. Do NOT include any cost, money, or dollar figures — estimate effort only.
-- Return valid JSON only, no markdown.`;
+// System prompt lives in prompts/estimator/<active version>.json — see prompts/README.md.
+const SYSTEM = getPrompt("estimator", "system");
 
 const RESULT_SCHEMA = {
   type: "object",
