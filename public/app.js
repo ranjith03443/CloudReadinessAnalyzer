@@ -418,9 +418,14 @@ async function openCostBudget() {
 async function openSettings() {
   openModal("Settings");
   try {
-    const [provRes, defRes] = await Promise.all([apiFetch("api/settings/providers"), apiFetch("api/settings/default")]);
+    const [provRes, defRes, scalingRes] = await Promise.all([
+      apiFetch("api/settings/providers"),
+      apiFetch("api/settings/default"),
+      apiFetch("api/settings/scaling"),
+    ]);
     const provBody = await provRes.json();
     const def = await defRes.json();
+    const scalingBody = await scalingRes.json();
     const provList = provBody.providers || [];
 
     els.modalBody.innerHTML = `
@@ -450,6 +455,38 @@ async function openSettings() {
           </div>
           <button id="settingsSaveBtn" class="mt-3 w-full rounded-md bg-cyan px-4 py-2 font-semibold text-navy-deep transition hover:bg-cyan/90">Save default</button>
           <p id="settingsStatus" class="mt-2 text-sm"></p>
+        </div>
+        <div class="border-t border-white/10 pt-4">
+          <div class="mb-1 font-mono text-xs uppercase tracking-[0.2em] text-slate-300">Scaling &amp; performance</div>
+          <p class="mb-3 text-[11px] leading-relaxed text-slate-500">
+            Architecture layers built and present in <span class="font-mono text-slate-400">lib/</span>, deliberately
+            <span class="text-slate-300">not wired into the pipeline yet</span>. These toggles record intent for review;
+            they do not change how analyses run.
+          </p>
+          <div class="space-y-2">
+            ${["rag", "cache"]
+              .map((id) => {
+                const meta = (scalingBody.layers && scalingBody.layers[id]) || {};
+                const on = !!(scalingBody.scaling && scalingBody.scaling[id] && scalingBody.scaling[id].enabled);
+                return `
+              <div class="rounded-md border border-white/10 bg-navy-deep/40 p-3">
+                <div class="flex items-center justify-between gap-3">
+                  <span class="text-sm text-slate-200">${esc(meta.label || id)}</span>
+                  <label class="inline-flex shrink-0 items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-slate-400">
+                    <span data-scaling-status="${id}">${on ? "flagged on" : "off"}</span>
+                    <input type="checkbox" data-scaling-toggle="${id}" ${on ? "checked" : ""} class="h-3.5 w-3.5 accent-cyan" />
+                  </label>
+                </div>
+                <p class="mt-1 text-[11px] leading-relaxed text-slate-500">${esc(meta.summary || "")}</p>
+                <p class="mt-1 text-[11px] leading-relaxed text-slate-600">
+                  <span class="text-slate-500">Not active:</span> ${esc(meta.whyNotYet || "")}
+                </p>
+                <p class="mt-1 text-[10px] font-mono leading-relaxed text-slate-600">${esc(meta.activationPoint || "")}</p>
+              </div>`;
+              })
+              .join("")}
+          </div>
+          <p id="scalingStatus" class="mt-2 text-sm"></p>
         </div>
       </div>`;
 
@@ -485,6 +522,38 @@ async function openSettings() {
         statusEl.textContent = "Could not reach the server.";
         statusEl.className = "mt-2 text-sm text-danger";
       }
+    });
+
+    // Scaling layers: persist the flag (architect-only, audited server-side).
+    // Nothing in the pipeline reads it yet — the note makes that explicit.
+    els.modalBody.querySelectorAll("[data-scaling-toggle]").forEach((box) => {
+      box.addEventListener("change", async () => {
+        const id = box.getAttribute("data-scaling-toggle");
+        const statusEl = document.getElementById("scalingStatus");
+        try {
+          const res = await apiFetch("api/settings/scaling", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ [id]: { enabled: box.checked } }),
+          });
+          const body = await res.json();
+          if (!res.ok) {
+            box.checked = !box.checked;
+            statusEl.textContent = body.error || "Could not save.";
+            statusEl.className = "mt-2 text-sm text-danger";
+            return;
+          }
+          const on = !!(body.scaling && body.scaling[id] && body.scaling[id].enabled);
+          const label = els.modalBody.querySelector(`[data-scaling-status="${id}"]`);
+          if (label) label.textContent = on ? "flagged on" : "off";
+          statusEl.textContent = "Saved and audited. Pipeline behavior is unchanged — this layer is scaffolded, not wired in.";
+          statusEl.className = "mt-2 text-sm text-green";
+        } catch {
+          box.checked = !box.checked;
+          statusEl.textContent = "Could not reach the server.";
+          statusEl.className = "mt-2 text-sm text-danger";
+        }
+      });
     });
   } catch {
     els.modalBody.innerHTML = `<p class="text-sm text-danger">Could not reach the server.</p>`;

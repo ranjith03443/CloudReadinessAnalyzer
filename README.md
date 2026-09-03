@@ -137,6 +137,25 @@ Called out explicitly rather than silently absent, since this is a prototype mea
 - **Whole-portfolio, multi-repo ingestion** — one repo or folder per run, capped at 200 files / 2MB combined. Portfolio-scale ingestion (the deck's 600-application scenario) would need chunked, multi-pass analysis.
 - **A real database** — persistence is JSON files under `data/` (`data/store.js`), which is fine for a single-process prototype but isn't built for concurrent writers. SQLite/Postgres is the natural Pilot-phase upgrade.
 
+### Scaling layers (scaffolded, not wired in)
+
+Two capabilities a portfolio-scale version needs are present as real modules
+under [`lib/`](lib/) with working stub implementations, but **deliberately not
+connected to the pipeline** — so the design is on record and the integration
+point is unambiguous:
+
+- **RAG / retrieval** ([`lib/rag/`](lib/rag/)) — chunk + index a large codebase
+  and retrieve only the relevant slices per agent, instead of the whole 2 MB
+  blob. Not needed below the current 200-file / 2 MB ingest cap.
+- **Agent response cache** ([`lib/cache/`](lib/cache/)) — skip an agent call when
+  the same `(system + source + model)` was analyzed before (content-hash key);
+  also the home for Anthropic prompt caching.
+
+On/off flags live in **Settings → Scaling & performance** (architect role) and
+in `store.getSettings().scaling`. While each layer's status is `"scaffolded"`,
+toggling a flag persists and is audited but changes no pipeline behavior. See
+[`lib/README.md`](lib/README.md) for activation steps.
+
 ---
 
 ## Project structure
@@ -153,6 +172,10 @@ CloudReadinessAnalyzer/
 │   ├── active.json              # pointer: which prompt version each agent loads
 │   ├── loader.js                # getPrompt(agent, key, vars), imported by the agents
 │   └── <agent>/v1.json          # one folder per agent, numbered version files
+├── lib/                         # scaling layers — scaffolded, NOT wired into the pipeline
+│   ├── scaling.js               # layer metadata + settings-flag shape
+│   ├── rag/                     # chunker + RagIndex (Noop / in-memory lexical stub)
+│   └── cache/                   # content-hash keys + AgentCache (Noop / in-memory LRU)
 ├── agents/
 │   ├── assessmentPipeline.js    # Phase 1 graph: detect+dependency → score+strategize → estimate
 │   ├── transformPipeline.js     # Phase 2 graph: modernize → validate

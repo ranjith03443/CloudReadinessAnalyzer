@@ -6,6 +6,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { normalizeScaling } from "../lib/scaling.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -188,11 +189,24 @@ export function appendCost({ runId, revision, phase, agent, provider, model, usa
 
 // --- Settings ---------------------------------------------------------------
 
+// Normalized shape (provider/model defaults + `scaling` flags, see
+// lib/scaling.js). saveSettings shallow-merges so a partial write never drops
+// the rest. Mirrors data/store-sqlite.js.
 export function getSettings() {
-  return readJson(FILES.settings, { defaultProvider: null, defaultModel: null });
+  const raw = readJson(FILES.settings, {});
+  return {
+    defaultProvider: raw.defaultProvider ?? null,
+    defaultModel: raw.defaultModel ?? null,
+    scaling: normalizeScaling(raw.scaling),
+  };
 }
 
-export function saveSettings(settings) {
-  writeJson(FILES.settings, settings);
-  return settings;
+export function saveSettings(patch) {
+  const current = getSettings();
+  const merged = { ...current, ...(patch || {}) };
+  if (patch && patch.scaling) {
+    merged.scaling = normalizeScaling({ ...current.scaling, ...patch.scaling });
+  }
+  writeJson(FILES.settings, merged);
+  return merged;
 }

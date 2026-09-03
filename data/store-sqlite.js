@@ -4,6 +4,7 @@ import path from "path";
 import crypto from "crypto";
 import Database from "better-sqlite3";
 import { fileURLToPath } from "url";
+import { normalizeScaling } from "../lib/scaling.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.join(__dirname, "store.sqlite");
@@ -151,15 +152,30 @@ export function appendCost({ runId, revision, phase, agent, provider, model, usa
   return entry;
 }
 
-// Settings
+// Settings. Always returns a normalized shape: provider/model defaults plus
+// the `scaling` flags (see lib/scaling.js). saveSettings shallow-merges its
+// argument onto the stored object so a partial write (e.g. only `scaling`)
+// never drops the rest.
 export function getSettings() {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'settings'").get();
-  if (!row) return { defaultProvider: null, defaultModel: null };
-  try { return JSON.parse(row.value); } catch { return { defaultProvider: null, defaultModel: null }; }
+  let raw = {};
+  if (row) {
+    try { raw = JSON.parse(row.value); } catch { raw = {}; }
+  }
+  return {
+    defaultProvider: raw.defaultProvider ?? null,
+    defaultModel: raw.defaultModel ?? null,
+    scaling: normalizeScaling(raw.scaling),
+  };
 }
 
-export function saveSettings(settings) {
+export function saveSettings(patch) {
+  const current = getSettings();
+  const merged = { ...current, ...(patch || {}) };
+  if (patch && patch.scaling) {
+    merged.scaling = normalizeScaling({ ...current.scaling, ...patch.scaling });
+  }
   const stmt = db.prepare("INSERT OR REPLACE INTO settings (key,value) VALUES ('settings',?)");
-  stmt.run(JSON.stringify(settings));
-  return settings;
+  stmt.run(JSON.stringify(merged));
+  return merged;
 }

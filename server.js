@@ -12,6 +12,7 @@ import * as store from "./data/store-sqlite.js";
 import { requireRole, getActingRole } from "./roles.js";
 import * as providers from "./providers.js";
 import { promptVersions } from "./prompts/loader.js";
+import { SCALING_LAYERS } from "./lib/scaling.js";
 
 dotenv.config();
 
@@ -723,6 +724,35 @@ app.post("/api/settings/default", requireRole("architect"), (req, res) => {
   res.json(settings);
 });
 
+// --- Scaling layers (RAG + agent cache) -------------------------------------
+// These layers are SCAFFOLDED in lib/ but not wired into the pipeline. The
+// flags persist and are audited so the decision is on record; while each
+// layer's status is "scaffolded" they change no pipeline behavior. See
+// lib/README.md and lib/scaling.js.
+
+app.get("/api/settings/scaling", (_req, res) => {
+  const { scaling } = store.getSettings();
+  res.json({ scaling, layers: SCALING_LAYERS });
+});
+
+app.post("/api/settings/scaling", requireRole("architect"), (req, res) => {
+  const { rag, cache } = req.body || {};
+  const patch = {};
+  if (rag && typeof rag.enabled === "boolean") patch.rag = { enabled: rag.enabled };
+  if (cache && typeof cache.enabled === "boolean") patch.cache = { enabled: cache.enabled };
+  if (!Object.keys(patch).length) {
+    return res.status(400).json({ error: "Provide rag.enabled and/or cache.enabled as booleans." });
+  }
+  const settings = store.saveSettings({ scaling: patch });
+  store.appendAudit({
+    actingRole: getActingRole(req),
+    action: "settings_scaling_changed",
+    runId: null,
+    details: settings.scaling,
+  });
+  res.json({ scaling: settings.scaling, layers: SCALING_LAYERS });
+});
+
 // Cost ledger: architect-role only. Every individual AI call, filterable by
 // date range and/or run, with aggregate totals.
 app.get("/api/cost", requireRole("architect"), (req, res) => {
@@ -853,6 +883,11 @@ app.listen(PORT, () => {
   const versions = promptVersions();
   console.log(
     `  Prompts:     ${Object.entries(versions).map(([id, v]) => `${id}@${v}`).join("  ")}`
+  );
+  const { scaling } = store.getSettings();
+  console.log(
+    `  Scaling:     RAG scaffold (${scaling.rag.enabled ? "flagged on" : "off"}) · ` +
+      `agent-cache scaffold (${scaling.cache.enabled ? "flagged on" : "off"}) — not wired into the pipeline`
   );
   console.log("");
 });
